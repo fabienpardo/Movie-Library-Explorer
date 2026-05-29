@@ -367,11 +367,31 @@ function renderFilterList(category) {
 
   container.querySelectorAll("input").forEach(input => {
     input.addEventListener("change", () => {
-      if (input.checked) state.selected[category].add(input.value);
-      else state.selected[category].delete(input.value);
-      render();
+      setFilterSelection(category, input.value, input.checked);
     });
   });
+
+  container.querySelectorAll(".filter-option").forEach(option => {
+    option.addEventListener("pointerdown", event => {
+      if (!shouldUseImmediateFilterTap(event)) return;
+      const input = option.querySelector("input");
+      if (!input) return;
+      event.preventDefault();
+      setFilterSelection(category, input.value, !input.checked);
+    });
+  });
+}
+
+function setFilterSelection(category, value, selected) {
+  if (selected) state.selected[category].add(value);
+  else state.selected[category].delete(value);
+  render();
+}
+
+function shouldUseImmediateFilterTap(event) {
+  if (event.pointerType && event.pointerType !== "touch") return false;
+  const active = document.activeElement;
+  return active === els.actorFilterSearch || active === els.directorFilterSearch;
 }
 
 function sortRows(rows) {

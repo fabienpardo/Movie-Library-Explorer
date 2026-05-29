@@ -55,3 +55,8 @@ Libellés de correspondance raccourcis pour éviter la troncature dans les menus
 
 - Ajoute l’icône flat comme favicon et icône iOS.
 - Améliore la recherche mobile dans les filtres acteurs/réalisateurs : le bouton sticky est masqué pendant la saisie pour laisser plus de place aux résultats.
+
+
+## v6.8
+
+- Corrige la sélection mobile des résultats de recherche dans les filtres : un acteur/réalisateur peut être sélectionné au premier toucher même si le clavier iOS est ouvert.
