@@ -23,7 +23,7 @@
   </header>
 
   <main class="app-shell">
-    <aside id="filterPanel" class="filter-panel" aria-label="Movie filters" aria-hidden="true">
+    <aside id="filterPanel" class="filter-panel" aria-label="Movie filters">
       <div class="filter-panel__handle" aria-hidden="true"></div>
       <div class="filter-panel__header">
         <div>
@@ -34,13 +34,14 @@
       </div>
 
       <div class="filter-panel__body">
-        <div class="control-group">
-          <label for="matchMode">Match mode</label>
-          <select id="matchMode">
-            <option value="any">Any selected value within each group</option>
-            <option value="all">All selected values within each group</option>
-          </select>
-          <p class="hint">Filter groups combine together. Example: genre + actor + director must all match.</p>
+        <nav class="filter-jump-nav" aria-label="Filter categories">
+          <button class="filter-jump-nav__button" type="button" data-scroll-target="genreSection">Genres</button>
+          <button class="filter-jump-nav__button" type="button" data-scroll-target="actorSection">Actors</button>
+          <button class="filter-jump-nav__button" type="button" data-scroll-target="directorSection">Directors</button>
+        </nav>
+
+        <div class="filter-help">
+          <strong>Match mode:</strong> choose how selected values behave inside each category. Categories still combine together, so a movie must match the selected genre rules, actor rules, and director rules.
         </div>
 
         <div class="button-row">
@@ -48,28 +49,52 @@
           <button id="reloadData" class="secondary-button" type="button">Reload data</button>
         </div>
 
-        <section class="filter-section" aria-labelledby="genreHeading">
+        <section id="genreSection" class="filter-section" aria-labelledby="genreHeading">
           <div class="filter-section__heading">
             <h3 id="genreHeading">Genres</h3>
             <span id="genreSelectedCount" class="count-badge">0</span>
           </div>
+          <div class="match-mode-card">
+            <label for="genreMatchMode">Genre match</label>
+            <select id="genreMatchMode">
+              <option value="any">Any selected genre</option>
+              <option value="all">All selected genres</option>
+            </select>
+            <p class="hint">Any = at least one selected genre. All = every selected genre must be present.</p>
+          </div>
           <div id="genreList" class="filter-list">Loading…</div>
         </section>
 
-        <section class="filter-section" aria-labelledby="actorHeading">
+        <section id="actorSection" class="filter-section" aria-labelledby="actorHeading">
           <div class="filter-section__heading">
             <h3 id="actorHeading">Actors</h3>
             <span id="actorSelectedCount" class="count-badge">0</span>
+          </div>
+          <div class="match-mode-card">
+            <label for="actorMatchMode">Actor match</label>
+            <select id="actorMatchMode">
+              <option value="any">Any selected actor</option>
+              <option value="all">All selected actors</option>
+            </select>
+            <p class="hint">Any = at least one selected actor appears. All = every selected actor must appear.</p>
           </div>
           <label class="visually-hidden" for="actorFilterSearch">Filter actor list</label>
           <input id="actorFilterSearch" type="search" placeholder="Search actors…" autocomplete="off" />
           <div id="actorList" class="filter-list filter-list--searchable">Loading…</div>
         </section>
 
-        <section class="filter-section" aria-labelledby="directorHeading">
+        <section id="directorSection" class="filter-section" aria-labelledby="directorHeading">
           <div class="filter-section__heading">
             <h3 id="directorHeading">Directors</h3>
             <span id="directorSelectedCount" class="count-badge">0</span>
+          </div>
+          <div class="match-mode-card">
+            <label for="directorMatchMode">Director match</label>
+            <select id="directorMatchMode">
+              <option value="any">Any selected director</option>
+              <option value="all">All selected directors</option>
+            </select>
+            <p class="hint">Any = at least one selected director. All = every selected director must be credited.</p>
           </div>
           <label class="visually-hidden" for="directorFilterSearch">Filter director list</label>
           <input id="directorFilterSearch" type="search" placeholder="Search directors…" autocomplete="off" />

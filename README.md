@@ -112,3 +112,27 @@ If a field is not detected, the app displays a diagnostic panel listing detected
 ## Note on country handling
 
 When several countries are present in the country column, the app displays only the first value. Supported separators are comma, semicolon, pipe, and slash.
+
+## v5 filter panel refinements
+
+This version adjusts the iPhone filter panel based on mobile use:
+
+- The filter header has more separation from the genre chips to avoid overlap.
+- Selected filter chips now use a stronger filled state and a check indicator, so selected vs. unselected values are easier to distinguish.
+- The filter panel includes quick navigation buttons for Genres, Actors, and Directors.
+- Match mode is now configured per category:
+  - Genre match: Any selected genre / All selected genres
+  - Actor match: Any selected actor / All selected actors
+  - Director match: Any selected director / All selected directors
+
+Categories still combine together: if genre, actor, and director filters are selected, a movie must satisfy each category's rule.
+
+## v5.1 patch notes
+
+This patch addresses the code review items:
+
+- Fixed desktop filter accessibility by keeping the visible desktop filter panel exposed to assistive technology.
+- Added basic focus handling for the mobile filter drawer: focus moves to the close button when opened and returns to the previous control when closed.
+- Added UTF-8 BOM stripping for CSV headers to avoid first-column detection failures.
+- Improved runtime parsing for values such as `2 hr 22 min`, `2 hrs`, and `2 hours 22 minutes`.
+- Added a diagnostic warning when the title column is not detected and the app falls back to the first detected column.

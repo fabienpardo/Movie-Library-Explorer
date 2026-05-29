@@ -16,8 +16,11 @@ const state = {
   actorListSearch: "",
   directorListSearch: "",
   sort: "title-asc",
-  matchMode: "any",
-  filtersOpen: false
+  genreMatchMode: "any",
+  actorMatchMode: "any",
+  directorMatchMode: "any",
+  filtersOpen: false,
+  columnWarnings: []
 };
 
 // Update these aliases if the Google Sheet column names change.
@@ -77,16 +80,25 @@ function detectColumns(labels) {
     return partial ? partial.raw : null;
   };
 
+  const detectedTitle = pick(columnAliases.title, { exclude: ["original title"] });
+  const warnings = [];
+  if (!detectedTitle && labels[0]) {
+    warnings.push(`Title column was not detected from aliases. Falling back to first detected column: "${labels[0]}".`);
+  }
+
   return {
-    title: pick(columnAliases.title, { exclude: ["original title"] }) || labels[0],
-    originalTitle: pick(columnAliases.originalTitle),
-    genres: pick(columnAliases.genres),
-    runtime: pick(columnAliases.runtime),
-    year: pick(columnAliases.year),
-    imdbRating: pick(columnAliases.imdbRating),
-    country: pick(columnAliases.country),
-    actors: pick(columnAliases.actors),
-    directors: pick(columnAliases.directors)
+    columns: {
+      title: detectedTitle || labels[0],
+      originalTitle: pick(columnAliases.originalTitle),
+      genres: pick(columnAliases.genres),
+      runtime: pick(columnAliases.runtime),
+      year: pick(columnAliases.year),
+      imdbRating: pick(columnAliases.imdbRating),
+      country: pick(columnAliases.country),
+      actors: pick(columnAliases.actors),
+      directors: pick(columnAliases.directors)
+    },
+    warnings
   };
 }
 
@@ -120,8 +132,8 @@ function parseRuntime(value) {
   const raw = String(value || "").toLowerCase().trim();
   if (!raw) return Number.NaN;
 
-  const hourMinute = raw.match(/(\d+)\s*h(?:ours?)?\s*(\d+)?\s*m?/i);
-  if (hourMinute) return Number(hourMinute[1]) * 60 + Number(hourMinute[2] || 0);
+  const hourMinute = raw.match(/(\d+)\s*(h|hr|hrs|hour|hours)\s*(\d+)?\s*(m|min|mins|minute|minutes)?/i);
+  if (hourMinute) return Number(hourMinute[1]) * 60 + Number(hourMinute[3] || 0);
 
   const colon = raw.match(/^(\d+)\s*:\s*(\d{1,2})$/);
   if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
@@ -196,7 +208,9 @@ function parseCsvTable(csvText) {
   if (records.length < 2) throw new Error("The CSV endpoint returned no usable rows.");
 
   const labels = records[0].map((label, index) => {
-    const clean = String(label || "").trim();
+    const clean = String(label || "")
+      .replace(/^\uFEFF/, "")
+      .trim();
     return clean || `Column ${index + 1}`;
   });
 
@@ -230,7 +244,9 @@ async function loadSheet() {
     const { labels, rows } = parseCsvTable(csvText);
     state.labels = labels;
     state.rows = rows.filter(row => Object.values(row).some(value => String(value || "").trim() !== ""));
-    state.columns = detectColumns(labels);
+    const detected = detectColumns(labels);
+    state.columns = detected.columns;
+    state.columnWarnings = detected.warnings;
 
     renderDiagnostics(labels);
     renderFilterLists();
@@ -257,19 +273,21 @@ function showError(message) {
 function renderDiagnostics(labels) {
   const importantFields = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle"];
   const missing = importantFields.filter(field => !state.columns[field]);
+  const warnings = [...state.columnWarnings];
 
-  if (!missing.length) {
+  if (!missing.length && !warnings.length) {
     $("diagnostics").hidden = true;
     return;
   }
 
+  const lines = ["Column detection warning."];
+  if (missing.length) lines.push(`Missing expected fields: ${missing.join(", ")}`);
+  if (warnings.length) lines.push(...warnings);
+  lines.push(`Detected columns: ${labels.join(", ")}`);
+  lines.push("To fix this, update the columnAliases object near the top of script.js.");
+
   $("diagnostics").hidden = false;
-  $("diagnostics").textContent = [
-    "Column detection warning.",
-    `Missing expected fields: ${missing.join(", ")}`,
-    `Detected columns: ${labels.join(", ")}`,
-    "To fix this, update the columnAliases object near the top of script.js."
-  ].join("\n");
+  $("diagnostics").textContent = lines.join("\n");
 }
 
 function getValueCounts(columnName, parser) {
@@ -362,10 +380,10 @@ function renderCheckboxFilter({ elementId, counts, selectedSet, emptyLabel, onCh
   });
 }
 
-function collectionMatches(rowValues, selectedValues) {
+function collectionMatches(rowValues, selectedValues, matchMode = "any") {
   const selected = [...selectedValues];
   if (selected.length === 0) return true;
-  if (state.matchMode === "all") return selected.every(value => rowValues.includes(value));
+  if (matchMode === "all") return selected.every(value => rowValues.includes(value));
   return selected.some(value => rowValues.includes(value));
 }
 
@@ -377,9 +395,9 @@ function getFilteredRows() {
     const actors = parseCredits(getValue(row, state.columns.actors));
     const directors = parseCredits(getValue(row, state.columns.directors));
 
-    const genreMatch = collectionMatches(genres, state.selectedGenres);
-    const actorMatch = collectionMatches(actors, state.selectedActors);
-    const directorMatch = collectionMatches(directors, state.selectedDirectors);
+    const genreMatch = collectionMatches(genres, state.selectedGenres, state.genreMatchMode);
+    const actorMatch = collectionMatches(actors, state.selectedActors, state.actorMatchMode);
+    const directorMatch = collectionMatches(directors, state.selectedDirectors, state.directorMatchMode);
     const searchMatch = !search || normalizeKey(Object.values(row).join(" ")).includes(search);
 
     return genreMatch && actorMatch && directorMatch && searchMatch;
@@ -547,20 +565,39 @@ function updateFilterCounts() {
   $("directorSelectedCount").textContent = String(state.selectedDirectors.size);
 }
 
+const desktopFiltersQuery = window.matchMedia("(min-width: 980px)");
+let lastFocusedElement = null;
+
+function syncFilterPanelAccessibility() {
+  const isDesktop = desktopFiltersQuery.matches;
+  $("filterPanel").setAttribute("aria-hidden", isDesktop || state.filtersOpen ? "false" : "true");
+  if (isDesktop) {
+    $("filterBackdrop").hidden = true;
+    document.body.classList.remove("filters-open");
+  }
+}
+
 function openFilters() {
+  lastFocusedElement = document.activeElement;
   state.filtersOpen = true;
   $("filterPanel").classList.add("is-open");
-  $("filterPanel").setAttribute("aria-hidden", "false");
   $("filterBackdrop").hidden = false;
   document.body.classList.add("filters-open");
+  syncFilterPanelAccessibility();
+  requestAnimationFrame(() => $("closeFilters").focus());
 }
 
 function closeFilters() {
   state.filtersOpen = false;
   $("filterPanel").classList.remove("is-open");
-  $("filterPanel").setAttribute("aria-hidden", "true");
   $("filterBackdrop").hidden = true;
   document.body.classList.remove("filters-open");
+  syncFilterPanelAccessibility();
+
+  if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+    lastFocusedElement.focus();
+  }
+  lastFocusedElement = null;
 }
 
 function clearAllFilters() {
@@ -570,9 +607,15 @@ function clearAllFilters() {
   state.search = "";
   state.actorListSearch = "";
   state.directorListSearch = "";
+  state.genreMatchMode = "any";
+  state.actorMatchMode = "any";
+  state.directorMatchMode = "any";
   $("searchInput").value = "";
   $("actorFilterSearch").value = "";
   $("directorFilterSearch").value = "";
+  $("genreMatchMode").value = "any";
+  $("actorMatchMode").value = "any";
+  $("directorMatchMode").value = "any";
   renderFilterLists();
   render();
 }
@@ -608,9 +651,27 @@ $("sortSelect").addEventListener("change", event => {
   render();
 });
 
-$("matchMode").addEventListener("change", event => {
-  state.matchMode = event.target.value;
+$("genreMatchMode").addEventListener("change", event => {
+  state.genreMatchMode = event.target.value;
   render();
+});
+
+$("actorMatchMode").addEventListener("change", event => {
+  state.actorMatchMode = event.target.value;
+  render();
+});
+
+$("directorMatchMode").addEventListener("change", event => {
+  state.directorMatchMode = event.target.value;
+  render();
+});
+
+document.querySelectorAll("[data-scroll-target]").forEach(button => {
+  button.addEventListener("click", () => {
+    const target = $(button.dataset.scrollTarget);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 });
 
 $("actorFilterSearch").addEventListener("input", event => {
@@ -640,4 +701,11 @@ document.addEventListener("keydown", event => {
   if (event.key === "Escape" && state.filtersOpen) closeFilters();
 });
 
+if (typeof desktopFiltersQuery.addEventListener === "function") {
+  desktopFiltersQuery.addEventListener("change", syncFilterPanelAccessibility);
+} else if (typeof desktopFiltersQuery.addListener === "function") {
+  desktopFiltersQuery.addListener(syncFilterPanelAccessibility);
+}
+
+syncFilterPanelAccessibility();
 loadSheet();
