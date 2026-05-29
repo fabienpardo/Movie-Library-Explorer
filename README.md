@@ -49,3 +49,9 @@ Si l’icône de l’écran d’accueil ne se met pas à jour, supprimer l’app
 ## Note v6.6
 
 Libellés de correspondance raccourcis pour éviter la troncature dans les menus.
+
+
+## v6.7
+
+- Ajoute l’icône flat comme favicon et icône iOS.
+- Améliore la recherche mobile dans les filtres acteurs/réalisateurs : le bouton sticky est masqué pendant la saisie pour laisser plus de place aux résultats.

@@ -531,6 +531,7 @@ function openFilters() {
 }
 
 function closeFilters() {
+  setFilterSearchFocus(false);
   state.filtersOpen = false;
   els.filterPanel.classList.remove("is-open");
   els.filterBackdrop.hidden = true;
@@ -575,6 +576,18 @@ function removeFilter(category, value) {
   render();
 }
 
+function setFilterSearchFocus(isFocused) {
+  els.filterPanel.classList.toggle("filter-panel--searching", isFocused);
+  if (isFocused) {
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active && els.filterPanel.contains(active)) {
+        active.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }, 80);
+  }
+}
+
 function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
@@ -583,6 +596,10 @@ function bindEvents() {
   els.directorMatchMode.addEventListener("change", event => { state.matchMode.director = event.target.value; render(); });
   els.actorFilterSearch.addEventListener("input", event => { state.filterSearch.actor = event.target.value; renderFilterLists(); });
   els.directorFilterSearch.addEventListener("input", event => { state.filterSearch.director = event.target.value; renderFilterLists(); });
+  [els.actorFilterSearch, els.directorFilterSearch].forEach(input => {
+    input.addEventListener("focus", () => setFilterSearchFocus(true));
+    input.addEventListener("blur", () => window.setTimeout(() => setFilterSearchFocus(false), 120));
+  });
 
   els.clearFilters.addEventListener("click", clearFilters);
   els.reloadData.addEventListener("click", loadSheet);

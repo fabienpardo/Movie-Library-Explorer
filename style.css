@@ -899,3 +899,28 @@ h1 {
     padding: 8px 12px;
   }
 }
+
+
+/* v6.7: when the iOS keyboard is open inside actor/director filter search,
+   hide the sticky footer and give results enough breathing room. */
+@media (max-width: 759px) {
+  .filter-panel.filter-panel--searching {
+    max-height: calc(100svh - 8px);
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+  }
+
+  .filter-panel.filter-panel--searching .filter-panel__footer {
+    display: none;
+  }
+
+  .filter-panel.filter-panel--searching .filter-list--searchable {
+    max-height: min(42svh, 360px);
+    padding-bottom: max(90px, env(safe-area-inset-bottom));
+    scroll-padding-bottom: 90px;
+  }
+
+  .filter-panel.filter-panel--searching #actorList,
+  .filter-panel.filter-panel--searching #directorList {
+    margin-bottom: 12px;
+  }
+}
