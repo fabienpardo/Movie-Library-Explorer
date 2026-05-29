@@ -1,63 +1,74 @@
-// Published Google Sheet source.
-// The /d/e/2PACX... published id does not work with /gviz/tq.
-// This app reads the published CSV endpoint instead.
 const PUBLISHED_SHEET_ID = "2PACX-1vR0f-YQic-WwbzgTdFQroIy9T1P14usd5ysqySDfuM0Hi9JtMS8jKJ1DaJBJOQAgXvkWpgTXjiCMTdK";
 const GID = "70337195";
 const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${GID}&single=true&output=csv`;
-
-const state = {
-  rows: [],
-  labels: [],
-  columns: {},
-  selectedGenres: new Set(),
-  selectedActors: new Set(),
-  selectedDirectors: new Set(),
-  search: "",
-  actorListSearch: "",
-  directorListSearch: "",
-  sort: "title-asc",
-  genreMatchMode: "any",
-  actorMatchMode: "any",
-  directorMatchMode: "any",
-  filtersOpen: false,
-  columnWarnings: []
-};
+const DESKTOP_QUERY = window.matchMedia("(min-width: 760px)");
 
 // Update these aliases if the Google Sheet column names change.
 const columnAliases = {
   title: ["title", "movie", "movie title", "name"],
   originalTitle: ["original title", "originaltitle", "original name", "original movie title"],
   genres: ["genre", "genres"],
-  runtime: [
-    "runtime",
-    "runtime min",
-    "runtime mins",
-    "runtime minutes",
-    "duration",
-    "duration min",
-    "duration mins",
-    "duration minutes",
-    "running time"
-  ],
+  runtime: ["runtime", "runtime min", "runtime mins", "runtime minutes", "duration", "duration min", "duration mins", "duration minutes", "running time"],
   year: ["year", "release year", "movie year"],
   imdbRating: ["imdb rating", "imdb", "imdb score", "imdb rate", "imdb user rating"],
-  country: [
-    "country",
-    "countries",
-    "production country",
-    "production countries",
-    "main country",
-    "origin country",
-    "country of origin",
-    "nationality"
-  ],
+  country: ["country", "countries", "production country", "production countries", "main country", "origin country", "country of origin", "nationality"],
   actors: ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"],
   directors: ["director", "directors", "directed by"]
 };
 
-const $ = (id) => document.getElementById(id);
+const els = {};
+const state = {
+  rows: [],
+  labels: [],
+  columns: {},
+  warnings: [],
+  search: "",
+  sort: "title-asc",
+  filterSearch: { actor: "", director: "" },
+  matchMode: { genre: "any", actor: "any", director: "any" },
+  selected: { genre: new Set(), actor: new Set(), director: new Set() },
+  activePanel: "genre",
+  filtersOpen: false,
+  lastFocus: null
+};
 
-function normalizeKey(value) {
+const fieldConfig = {
+  genre: {
+    column: "genres",
+    listId: "genreList",
+    countId: "genreSelectedCount",
+    parser: parseList,
+    empty: "No genres available for the current filters"
+  },
+  actor: {
+    column: "actors",
+    listId: "actorList",
+    countId: "actorSelectedCount",
+    parser: parseList,
+    searchKey: "actor",
+    empty: "No actors available for the current filters"
+  },
+  director: {
+    column: "directors",
+    listId: "directorList",
+    countId: "directorSelectedCount",
+    parser: parseList,
+    searchKey: "director",
+    empty: "No directors available for the current filters"
+  }
+};
+
+function cacheEls() {
+  [
+    "status", "diagnostics", "movieGrid", "activeFilters", "filterPanel", "filterBackdrop",
+    "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
+    "searchInput", "sortSelect", "genreMatchMode", "actorMatchMode", "directorMatchMode",
+    "actorFilterSearch", "directorFilterSearch", "genreList", "actorList", "directorList",
+    "genreSelectedCount", "actorSelectedCount", "directorSelectedCount"
+  ].forEach(id => { els[id] = document.getElementById(id); });
+}
+
+function normalize(value) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -66,29 +77,115 @@ function normalizeKey(value) {
     .trim();
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function parseList(value) {
+  return String(value || "").split(/[,;|]/).map(item => item.trim()).filter(Boolean);
+}
+
+function mainCountry(value) {
+  return String(value || "").split(/[,;|/]/).map(item => item.trim()).filter(Boolean)[0] || "";
+}
+
+function parseNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const match = String(value || "").replace(",", ".").match(/-?\d+(\.\d+)?/);
+  return match ? Number(match[0]) : Number.NaN;
+}
+
+function parseRuntime(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value || "").toLowerCase().trim();
+  if (!raw) return Number.NaN;
+
+  const hm = raw.match(/(\d+)\s*(h|hr|hrs|hour|hours)\s*(\d+)?\s*(m|min|mins|minute|minutes)?/i);
+  if (hm) return Number(hm[1]) * 60 + Number(hm[3] || 0);
+
+  const colon = raw.match(/^(\d+)\s*:\s*(\d{1,2})$/);
+  if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
+
+  const min = raw.match(/(\d+(?:\.\d+)?)\s*(min|mins|minutes|m)?/i);
+  return min ? Number(min[1]) : Number.NaN;
+}
+
+function formatRuntime(minutes) {
+  if (!Number.isFinite(minutes)) return "Runtime unknown";
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (quoted && next === '"') {
+        field += '"';
+        i += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === "," && !quoted) {
+      row.push(field);
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+
+  row.push(field);
+  rows.push(row);
+  return rows.filter(items => items.some(item => String(item || "").trim()));
+}
+
+function csvToTable(text) {
+  const records = parseCsv(text);
+  if (records.length < 2) throw new Error("The CSV endpoint returned no usable rows.");
+
+  const labels = records[0].map((label, index) => String(label || "").replace(/^\uFEFF/, "").trim() || `Column ${index + 1}`);
+  const rows = records.slice(1).map(record => Object.fromEntries(labels.map((label, index) => [label, record[index] ?? ""])));
+  return { labels, rows };
+}
+
 function detectColumns(labels) {
-  const normalizedLabels = labels.map(label => ({ raw: label, norm: normalizeKey(label) }));
-  const pick = (aliases, options = {}) => {
-    const normalizedAliases = aliases.map(normalizeKey);
-    const exclusions = (options.exclude || []).map(normalizeKey);
-    const candidates = normalizedLabels.filter(label => !exclusions.some(exclusion => label.norm === exclusion || label.norm.includes(exclusion)));
-
-    const exact = candidates.find(label => normalizedAliases.includes(label.norm));
-    if (exact) return exact.raw;
-
-    const partial = candidates.find(label => normalizedAliases.some(alias => label.norm.includes(alias)));
-    return partial ? partial.raw : null;
+  const normalized = labels.map(raw => ({ raw, norm: normalize(raw) }));
+  const pick = (aliases, exclusions = []) => {
+    const aliasNorms = aliases.map(normalize);
+    const excluded = exclusions.map(normalize);
+    const candidates = normalized.filter(item => !excluded.some(ex => item.norm === ex || item.norm.includes(ex)));
+    return candidates.find(item => aliasNorms.includes(item.norm))?.raw
+      || candidates.find(item => aliasNorms.some(alias => item.norm.includes(alias)))?.raw
+      || null;
   };
 
-  const detectedTitle = pick(columnAliases.title, { exclude: ["original title"] });
-  const warnings = [];
-  if (!detectedTitle && labels[0]) {
-    warnings.push(`Title column was not detected from aliases. Falling back to first detected column: "${labels[0]}".`);
-  }
+  const title = pick(columnAliases.title, ["original title"]);
+  const warnings = title ? [] : [`Title column was not detected. Falling back to first column: "${labels[0]}".`];
 
   return {
     columns: {
-      title: detectedTitle || labels[0],
+      title: title || labels[0],
       originalTitle: pick(columnAliases.originalTitle),
       genres: pick(columnAliases.genres),
       runtime: pick(columnAliases.runtime),
@@ -102,610 +199,413 @@ function detectColumns(labels) {
   };
 }
 
-function getValue(row, columnName) {
-  if (!columnName) return "";
-  return row[columnName] ?? "";
-}
-
-function parseDelimited(value) {
-  return String(value || "")
-    .split(/[,;|]/)
-    .map(item => item.trim())
-    .filter(Boolean);
-}
-
-function parseCredits(value) {
-  return String(value || "")
-    .split(/[,;|]/)
-    .map(item => item.trim())
-    .filter(Boolean);
-}
-
-function getMainCountry(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  return raw.split(/[,;|/]/).map(item => item.trim()).filter(Boolean)[0] || raw;
-}
-
-function parseRuntime(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const raw = String(value || "").toLowerCase().trim();
-  if (!raw) return Number.NaN;
-
-  const hourMinute = raw.match(/(\d+)\s*(h|hr|hrs|hour|hours)\s*(\d+)?\s*(m|min|mins|minute|minutes)?/i);
-  if (hourMinute) return Number(hourMinute[1]) * 60 + Number(hourMinute[3] || 0);
-
-  const colon = raw.match(/^(\d+)\s*:\s*(\d{1,2})$/);
-  if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
-
-  const minutes = raw.match(/(\d+(?:\.\d+)?)\s*(min|mins|minutes|m)?/i);
-  if (minutes) return Number(minutes[1]);
-
-  return Number.NaN;
-}
-
-function parseNumber(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const cleaned = String(value || "").replace(",", ".").match(/-?\d+(\.\d+)?/);
-  return cleaned ? Number(cleaned[0]) : Number.NaN;
-}
-
-function formatRuntime(minutes) {
-  if (!Number.isFinite(minutes)) return "Runtime unknown";
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  if (h && m) return `${h}h ${m}m`;
-  if (h) return `${h}h`;
-  return `${m}m`;
-}
-
-function parseCsv(csvText) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < csvText.length; i += 1) {
-    const char = csvText[i];
-    const next = csvText[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        field += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      row.push(field);
-      field = "";
-      continue;
-    }
-
-    if ((char === "\n" || char === "\r") && !inQuotes) {
-      if (char === "\r" && next === "\n") i += 1;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-      continue;
-    }
-
-    field += char;
-  }
-
-  row.push(field);
-  rows.push(row);
-
-  return rows.filter(items => items.some(item => String(item || "").trim() !== ""));
-}
-
-function parseCsvTable(csvText) {
-  const records = parseCsv(csvText);
-  if (records.length < 2) throw new Error("The CSV endpoint returned no usable rows.");
-
-  const labels = records[0].map((label, index) => {
-    const clean = String(label || "")
-      .replace(/^\uFEFF/, "")
-      .trim();
-    return clean || `Column ${index + 1}`;
-  });
-
-  const rows = records.slice(1).map(record => {
-    const output = {};
-    labels.forEach((label, index) => {
-      output[label] = record[index] ?? "";
-    });
-    return output;
-  });
-
-  return { labels, rows };
+function cell(row, field) {
+  const column = state.columns[field];
+  return column ? row[column] ?? "" : "";
 }
 
 async function loadSheet() {
-  $("status").textContent = "Loading movie library…";
-  $("diagnostics").hidden = true;
-  $("diagnostics").textContent = "";
-  $("movieGrid").innerHTML = "";
-  setFilterListLoading();
+  showLoading();
 
   try {
     const response = await fetch(SHEET_CSV_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Could not load the published CSV endpoint. HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(`Could not load the CSV endpoint. HTTP ${response.status}.`);
 
-    const csvText = await response.text();
-    if (/<!doctype html|<html[\s>]/i.test(csvText)) {
-      throw new Error("The Google endpoint returned HTML instead of CSV. Re-publish the tab as CSV or use a normally shared Google Sheet URL with a real spreadsheet ID.");
-    }
+    const text = await response.text();
+    if (/<!doctype html|<html[\s>]/i.test(text)) throw new Error("Google returned HTML instead of CSV. Check that the sheet tab is still published.");
 
-    const { labels, rows } = parseCsvTable(csvText);
-    state.labels = labels;
-    state.rows = rows.filter(row => Object.values(row).some(value => String(value || "").trim() !== ""));
+    const { labels, rows } = csvToTable(text);
     const detected = detectColumns(labels);
+    state.labels = labels;
+    state.rows = rows.filter(row => Object.values(row).some(value => String(value || "").trim()));
     state.columns = detected.columns;
-    state.columnWarnings = detected.warnings;
+    state.warnings = detected.warnings;
 
-    renderDiagnostics(labels);
-    renderFilterLists();
+    renderDiagnostics();
     render();
   } catch (error) {
-    showError(`${error.message}\n\nSource used: ${SHEET_CSV_URL}\n\nIf this is a CORS or network error, test the same GitHub Pages URL in another browser. If it still fails, the stable fix is to share the original Google Sheet as 'Anyone with the link can view' and use its /d/<real-spreadsheet-id>/gviz/tq endpoint.`);
+    showError(`${error.message}\n\nSource: ${SHEET_CSV_URL}`);
   }
 }
 
-function setFilterListLoading() {
-  $("genreList").textContent = "Loading…";
-  $("actorList").textContent = "Loading…";
-  $("directorList").textContent = "Loading…";
+function showLoading() {
+  els.status.textContent = "Loading movie library…";
+  els.diagnostics.hidden = true;
+  els.movieGrid.innerHTML = "";
+  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "Loading…"; });
 }
 
 function showError(message) {
-  $("status").innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
-  $("genreList").textContent = "No genres loaded";
-  $("actorList").textContent = "No actors loaded";
-  $("directorList").textContent = "No directors loaded";
-  $("movieGrid").innerHTML = "";
+  els.status.innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
+  els.movieGrid.innerHTML = "";
+  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "No data loaded"; });
 }
 
-function renderDiagnostics(labels) {
-  const importantFields = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle"];
-  const missing = importantFields.filter(field => !state.columns[field]);
-  const warnings = [...state.columnWarnings];
+function renderDiagnostics() {
+  const expected = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle"];
+  const missing = expected.filter(field => !state.columns[field]);
+  const lines = [];
 
-  if (!missing.length && !warnings.length) {
-    $("diagnostics").hidden = true;
+  if (missing.length) lines.push(`Missing expected fields: ${missing.join(", ")}`);
+  lines.push(...state.warnings);
+
+  if (!lines.length) {
+    els.diagnostics.hidden = true;
     return;
   }
 
-  const lines = ["Column detection warning."];
-  if (missing.length) lines.push(`Missing expected fields: ${missing.join(", ")}`);
-  if (warnings.length) lines.push(...warnings);
-  lines.push(`Detected columns: ${labels.join(", ")}`);
-  lines.push("To fix this, update the columnAliases object near the top of script.js.");
-
-  $("diagnostics").hidden = false;
-  $("diagnostics").textContent = lines.join("\n");
+  lines.unshift("Column detection warning.");
+  lines.push(`Detected columns: ${state.labels.join(", ")}`);
+  lines.push("Update columnAliases near the top of script.js if needed.");
+  els.diagnostics.textContent = lines.join("\n");
+  els.diagnostics.hidden = false;
 }
 
-function getValueCounts(columnName, parser) {
+function rowValues(row) {
+  return {
+    genre: parseList(cell(row, "genres")),
+    actor: parseList(cell(row, "actors")),
+    director: parseList(cell(row, "directors"))
+  };
+}
+
+function matchesList(values, selected, mode) {
+  const items = [...selected];
+  if (!items.length) return true;
+  return mode === "all" ? items.every(item => values.includes(item)) : items.some(item => values.includes(item));
+}
+
+function matchesSearch(row) {
+  return !state.search || normalize(Object.values(row).join(" ")).includes(normalize(state.search));
+}
+
+function matchesFilters(row, skipCategory = null) {
+  const values = rowValues(row);
+  return matchesSearch(row)
+    && (skipCategory === "genre" || matchesList(values.genre, state.selected.genre, state.matchMode.genre))
+    && (skipCategory === "actor" || matchesList(values.actor, state.selected.actor, state.matchMode.actor))
+    && (skipCategory === "director" || matchesList(values.director, state.selected.director, state.matchMode.director));
+}
+
+function filteredRows() {
+  return state.rows.filter(row => matchesFilters(row));
+}
+
+function optionRows(category) {
+  const skipSameCategory = state.matchMode[category] === "any" ? category : null;
+  return state.rows.filter(row => matchesFilters(row, skipSameCategory));
+}
+
+function valueCounts(rows, category) {
+  const { column, parser } = fieldConfig[category];
+  const columnName = state.columns[column];
   if (!columnName) return [];
+
   const counts = new Map();
-  for (const row of state.rows) {
-    const values = parser(getValue(row, columnName));
-    for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  for (const row of rows) {
+    for (const value of parser(row[columnName])) counts.set(value, (counts.get(value) || 0) + 1);
+  }
+
+  for (const selected of state.selected[category]) {
+    if (!counts.has(selected)) counts.set(selected, 0);
   }
 
   return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-function filterCountsBySearch(counts, searchValue) {
-  const search = normalizeKey(searchValue);
-  if (!search) return counts;
-  return counts.filter(([value]) => normalizeKey(value).includes(search));
+function searchOptionCounts(counts, category) {
+  const key = fieldConfig[category].searchKey;
+  if (!key || !state.filterSearch[key]) return counts;
+  const term = normalize(state.filterSearch[key]);
+  return counts.filter(([value]) => normalize(value).includes(term));
 }
 
-function prioritizeSelected(counts, selectedSet) {
+function sortedOptions(counts, category) {
+  const selected = state.selected[category];
   return [...counts].sort((a, b) => {
-    const aSelected = selectedSet.has(a[0]);
-    const bSelected = selectedSet.has(b[0]);
-    if (aSelected !== bSelected) return aSelected ? -1 : 1;
+    if (selected.has(a[0]) !== selected.has(b[0])) return selected.has(a[0]) ? -1 : 1;
     return a[0].localeCompare(b[0]);
   });
 }
 
 function renderFilterLists() {
-  renderCheckboxFilter({
-    elementId: "genreList",
-    counts: getValueCounts(state.columns.genres, parseDelimited),
-    selectedSet: state.selectedGenres,
-    emptyLabel: state.columns.genres ? "No genres loaded" : "No genres column detected",
-    onChange: render
-  });
-
-  renderCheckboxFilter({
-    elementId: "actorList",
-    counts: filterCountsBySearch(getValueCounts(state.columns.actors, parseCredits), state.actorListSearch),
-    selectedSet: state.selectedActors,
-    emptyLabel: state.columns.actors ? "No actors match the list search" : "No actors column detected",
-    onChange: render,
-    maxItems: state.actorListSearch ? 180 : 80,
-    limitHint: "Showing the first actors alphabetically. Search to narrow the list."
-  });
-
-  renderCheckboxFilter({
-    elementId: "directorList",
-    counts: filterCountsBySearch(getValueCounts(state.columns.directors, parseCredits), state.directorListSearch),
-    selectedSet: state.selectedDirectors,
-    emptyLabel: state.columns.directors ? "No directors match the list search" : "No directors column detected",
-    onChange: render,
-    maxItems: state.directorListSearch ? 180 : 100,
-    limitHint: "Showing the first directors alphabetically. Search to narrow the list."
-  });
-
-  updateFilterCounts();
+  for (const category of Object.keys(fieldConfig)) renderFilterList(category);
+  updateCounts();
 }
 
-function renderCheckboxFilter({ elementId, counts, selectedSet, emptyLabel, onChange, maxItems = Infinity, limitHint = "" }) {
-  const container = $(elementId);
+function renderFilterList(category) {
+  const cfg = fieldConfig[category];
+  const container = els[cfg.listId];
+  const columnDetected = Boolean(state.columns[cfg.column]);
+  let counts = columnDetected ? valueCounts(optionRows(category), category) : [];
+  counts = sortedOptions(searchOptionCounts(counts, category), category);
+
   if (!counts.length) {
-    container.textContent = emptyLabel;
+    container.textContent = columnDetected ? cfg.empty : `No ${category} column detected`;
     return;
   }
 
-  const ordered = prioritizeSelected(counts, selectedSet);
-  const visible = ordered.slice(0, maxItems);
-  const hiddenCount = Math.max(0, ordered.length - visible.length);
+  const limit = category === "genre" ? Infinity : (state.filterSearch[cfg.searchKey] ? 180 : 80);
+  const visible = counts.slice(0, limit);
+  const hidden = counts.length - visible.length;
 
-  container.innerHTML = visible.map(([value, count]) => `
-    <label class="filter-option">
-      <input type="checkbox" value="${escapeHtml(value)}" ${selectedSet.has(value) ? "checked" : ""} />
-      <span class="filter-option__content">
-        <span class="filter-option__label">${escapeHtml(value)}</span>
-        <span class="filter-option__count">${count}</span>
-      </span>
-    </label>
-  `).join("") + (hiddenCount ? `<p class="hint">+${hiddenCount} more. ${escapeHtml(limitHint)}</p>` : "");
+  container.innerHTML = visible.map(([value, count]) => {
+    const checked = state.selected[category].has(value) ? "checked" : "";
+    return `
+      <label class="filter-option">
+        <input type="checkbox" value="${escapeHtml(value)}" ${checked} />
+        <span class="filter-option__content">
+          <span class="filter-option__label">${escapeHtml(value)}</span>
+          <span class="filter-option__count">${count}</span>
+        </span>
+      </label>`;
+  }).join("") + (hidden > 0 ? `<p class="hint">+${hidden} more. Search to narrow the list.</p>` : "");
 
-  container.querySelectorAll("input[type='checkbox']").forEach(input => {
-    input.addEventListener("change", (event) => {
-      const value = event.target.value;
-      if (event.target.checked) selectedSet.add(value);
-      else selectedSet.delete(value);
-      updateFilterCounts();
-      onChange();
+  container.querySelectorAll("input").forEach(input => {
+    input.addEventListener("change", () => {
+      if (input.checked) state.selected[category].add(input.value);
+      else state.selected[category].delete(input.value);
+      render();
     });
-  });
-}
-
-function collectionMatches(rowValues, selectedValues, matchMode = "any") {
-  const selected = [...selectedValues];
-  if (selected.length === 0) return true;
-  if (matchMode === "all") return selected.every(value => rowValues.includes(value));
-  return selected.some(value => rowValues.includes(value));
-}
-
-function getFilteredRows() {
-  const search = normalizeKey(state.search);
-
-  return state.rows.filter(row => {
-    const genres = parseDelimited(getValue(row, state.columns.genres));
-    const actors = parseCredits(getValue(row, state.columns.actors));
-    const directors = parseCredits(getValue(row, state.columns.directors));
-
-    const genreMatch = collectionMatches(genres, state.selectedGenres, state.genreMatchMode);
-    const actorMatch = collectionMatches(actors, state.selectedActors, state.actorMatchMode);
-    const directorMatch = collectionMatches(directors, state.selectedDirectors, state.directorMatchMode);
-    const searchMatch = !search || normalizeKey(Object.values(row).join(" ")).includes(search);
-
-    return genreMatch && actorMatch && directorMatch && searchMatch;
   });
 }
 
 function sortRows(rows) {
   const [field, direction] = state.sort.split("-");
   const multiplier = direction === "desc" ? -1 : 1;
-
-  return [...rows].sort((a, b) => {
-    if (field === "runtime") {
-      return compareNumbers(parseRuntime(getValue(a, state.columns.runtime)), parseRuntime(getValue(b, state.columns.runtime)), multiplier);
-    }
-    if (field === "year") {
-      return compareNumbers(parseNumber(getValue(a, state.columns.year)), parseNumber(getValue(b, state.columns.year)), multiplier);
-    }
-    if (field === "imdbRating") {
-      return compareNumbers(parseNumber(getValue(a, state.columns.imdbRating)), parseNumber(getValue(b, state.columns.imdbRating)), multiplier);
-    }
-    if (field === "originalTitle") {
-      return compareText(getDisplayOriginalTitle(a), getDisplayOriginalTitle(b), multiplier);
-    }
-    if (field === "country") {
-      return compareText(getMainCountry(getValue(a, state.columns.country)), getMainCountry(getValue(b, state.columns.country)), multiplier);
-    }
-    return compareText(getValue(a, state.columns.title), getValue(b, state.columns.title), multiplier);
-  });
+  return [...rows].sort((a, b) => compare(sortValue(a, field), sortValue(b, field), multiplier));
 }
 
-function compareNumbers(a, b, multiplier) {
-  const aValid = Number.isFinite(a);
-  const bValid = Number.isFinite(b);
-  if (!aValid && !bValid) return 0;
-  if (!aValid) return 1;
-  if (!bValid) return -1;
-  return (a - b) * multiplier;
+function sortValue(row, field) {
+  if (field === "runtime") return parseRuntime(cell(row, "runtime"));
+  if (field === "year") return parseNumber(cell(row, "year"));
+  if (field === "imdbRating") return parseNumber(cell(row, "imdbRating"));
+  if (field === "originalTitle") return displayOriginalTitle(row);
+  if (field === "country") return mainCountry(cell(row, "country"));
+  return displayTitle(row);
 }
 
-function compareText(a, b, multiplier) {
-  const aText = String(a || "").trim();
-  const bText = String(b || "").trim();
-  if (!aText && !bText) return 0;
-  if (!aText) return 1;
-  if (!bText) return -1;
-  return aText.localeCompare(bText) * multiplier;
+function compare(a, b, multiplier) {
+  const aNumber = typeof a === "number";
+  const bNumber = typeof b === "number";
+  if (aNumber || bNumber) {
+    const aValid = Number.isFinite(a);
+    const bValid = Number.isFinite(b);
+    if (!aValid && !bValid) return 0;
+    if (!aValid) return 1;
+    if (!bValid) return -1;
+    return (a - b) * multiplier;
+  }
+
+  const left = String(a || "").trim();
+  const right = String(b || "").trim();
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left.localeCompare(right) * multiplier;
 }
 
-function getDisplayTitle(row) {
-  return getValue(row, state.columns.title) || getValue(row, state.columns.originalTitle) || "Untitled";
+function displayTitle(row) {
+  return cell(row, "title") || cell(row, "originalTitle") || "Untitled";
 }
 
-function getDisplayOriginalTitle(row) {
-  const originalTitle = getValue(row, state.columns.originalTitle);
-  const title = getValue(row, state.columns.title);
-  return originalTitle && originalTitle !== title ? originalTitle : "";
+function displayOriginalTitle(row) {
+  const original = cell(row, "originalTitle");
+  const title = cell(row, "title");
+  return original && original !== title ? original : "";
 }
 
 function render() {
-  const filtered = sortRows(getFilteredRows());
-  const totalRuntime = filtered.reduce((sum, row) => {
-    const runtime = parseRuntime(getValue(row, state.columns.runtime));
+  const rows = sortRows(filteredRows());
+  const totalRuntime = rows.reduce((sum, row) => {
+    const runtime = parseRuntime(cell(row, "runtime"));
     return Number.isFinite(runtime) ? sum + runtime : sum;
   }, 0);
 
-  $("status").innerHTML = `
-    <span><strong>${filtered.length}</strong> / ${state.rows.length} movies</span>
-    <span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> total runtime</span>
-  `;
+  els.status.innerHTML = `
+    <span><strong>${rows.length}</strong> / ${state.rows.length} movies</span>
+    <span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> total runtime</span>`;
 
   renderActiveFilters();
-  updateFilterCounts();
-
-  if (filtered.length === 0) {
-    $("movieGrid").innerHTML = `<div class="empty">No movies match the current filters.</div>`;
-    return;
-  }
-
-  $("movieGrid").innerHTML = filtered.map(row => renderMovieCard(row)).join("");
+  renderFilterLists();
+  els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `<div class="empty">No movies match the current filters.</div>`;
 }
 
 function renderMovieCard(row) {
-  const title = getDisplayTitle(row);
-  const originalTitle = getDisplayOriginalTitle(row);
-  const year = getValue(row, state.columns.year);
-  const imdbRating = getValue(row, state.columns.imdbRating);
-  const runtime = parseRuntime(getValue(row, state.columns.runtime));
-  const country = getMainCountry(getValue(row, state.columns.country));
-  const genres = parseDelimited(getValue(row, state.columns.genres));
-  const actors = parseCredits(getValue(row, state.columns.actors));
-  const directors = parseCredits(getValue(row, state.columns.directors));
+  const title = displayTitle(row);
+  const originalTitle = displayOriginalTitle(row);
+  const runtime = parseRuntime(cell(row, "runtime"));
+  const rating = cell(row, "imdbRating");
+  const country = mainCountry(cell(row, "country"));
+  const genres = parseList(cell(row, "genres"));
+  const actors = parseList(cell(row, "actors"));
+  const directors = parseList(cell(row, "directors"));
+  const year = cell(row, "year");
 
-  const badges = [
-    imdbRating ? `<span class="meta-badge meta-badge--rating">IMDb ${escapeHtml(imdbRating)}</span>` : null,
+  const meta = [
+    rating ? `<span class="meta-badge meta-badge--rating ${ratingClass(rating)}">IMDb ${escapeHtml(rating)}</span>` : "",
     `<span class="meta-badge">${escapeHtml(formatRuntime(runtime))}</span>`,
-    year ? `<span class="meta-badge">${escapeHtml(year)}</span>` : null,
-    country ? `<span class="meta-badge">${escapeHtml(country)}</span>` : null
-  ].filter(Boolean).join("");
+    year ? `<span class="meta-badge">${escapeHtml(year)}</span>` : "",
+    country ? `<span class="meta-badge">${escapeHtml(country)}</span>` : ""
+  ].join("");
 
   return `
     <article class="movie-card">
-      <div class="movie-card__header">
+      <header class="movie-card__header">
         <h2>${escapeHtml(title)}</h2>
-        ${originalTitle ? `<div class="original-title">${escapeHtml(originalTitle)}</div>` : ""}
-      </div>
-
-      <div class="badge-row">${badges}</div>
-
+        ${originalTitle ? `<p class="original-title">${escapeHtml(originalTitle)}</p>` : ""}
+      </header>
+      <div class="badge-row">${meta}</div>
       <div class="credits">
-        ${directors.length ? `<div><strong>Director:</strong> ${escapeHtml(directors.slice(0, 3).join(", "))}${directors.length > 3 ? "…" : ""}</div>` : ""}
-        ${renderActors(actors)}
+        ${directors.length ? `<p><strong>Director:</strong> ${highlightList(directors, state.selected.director)}</p>` : ""}
+        ${actors.length ? `<p class="actors-line"><strong>Actors:</strong> ${highlightList(actors, state.selected.actor)}</p>` : ""}
       </div>
-
-      <div class="chips">
-        ${genres.map(genre => `<span class="genre-chip">${escapeHtml(genre)}</span>`).join("")}
-      </div>
-    </article>
-  `;
+      <div class="chips">${genres.map(genre => `<span class="genre-chip ${state.selected.genre.has(genre) ? "genre-chip--selected" : ""}">${escapeHtml(genre)}</span>`).join("")}</div>
+    </article>`;
 }
 
-function renderActors(actors) {
-  if (!actors.length) return "";
-  const visible = actors.slice(0, 4).join(", ");
-  if (actors.length <= 4) return `<div><strong>Actors:</strong> ${escapeHtml(visible)}</div>`;
+function ratingClass(value) {
+  const score = parseNumber(value);
+  if (!Number.isFinite(score)) return "meta-badge--rating-unknown";
+  if (score >= 8) return "meta-badge--rating-good";
+  if (score >= 7) return "meta-badge--rating-mid";
+  return "meta-badge--rating-low";
+}
 
-  return `
-    <details class="actors-details">
-      <summary><strong>Actors:</strong>&nbsp;${escapeHtml(visible)}…</summary>
-      <div class="actors-details__body">${escapeHtml(actors.slice(4).join(", "))}</div>
-    </details>
-  `;
+function highlightList(values, selected) {
+  return values.map(value => {
+    const cls = selected.has(value) ? "credit-token selected-credit" : "credit-token";
+    return `<span class="${cls}">${escapeHtml(value)}</span>`;
+  }).join(`<span class="credit-separator">, </span>`);
 }
 
 function renderActiveFilters() {
-  const items = [
-    ...[...state.selectedGenres].map(value => ({ group: "Genre", type: "genre", value })),
-    ...[...state.selectedActors].map(value => ({ group: "Actor", type: "actor", value })),
-    ...[...state.selectedDirectors].map(value => ({ group: "Director", type: "director", value }))
-  ];
-
-  if (state.search) items.unshift({ group: "Search", type: "search", value: state.search });
-
-  if (!items.length) {
-    $("activeFilters").innerHTML = "";
-    return;
+  const items = [];
+  if (state.search) items.push({ group: "Search", category: "search", value: state.search });
+  for (const [category, label] of [["genre", "Genre"], ["actor", "Actor"], ["director", "Director"]]) {
+    for (const value of state.selected[category]) items.push({ group: label, category, value });
   }
 
-  $("activeFilters").innerHTML = items.map(item => `
-    <span class="active-filter-chip" title="${escapeHtml(item.group)}: ${escapeHtml(item.value)}">
+  els.activeFilters.innerHTML = items.map(item => `
+    <span class="active-filter-chip">
       <span>${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>
-      <button class="filter-remove" type="button" aria-label="Remove ${escapeHtml(item.group)} filter" data-filter-type="${escapeHtml(item.type)}" data-filter-value="${escapeHtml(item.value)}">×</button>
-    </span>
-  `).join("");
+      <button class="filter-remove" type="button" data-category="${item.category}" data-value="${escapeHtml(item.value)}" aria-label="Remove ${escapeHtml(item.group)} filter">×</button>
+    </span>`).join("");
 }
 
-function activeFilterCount() {
-  return state.selectedGenres.size + state.selectedActors.size + state.selectedDirectors.size + (state.search ? 1 : 0);
+function activeCount() {
+  return state.selected.genre.size + state.selected.actor.size + state.selected.director.size + (state.search ? 1 : 0);
 }
 
-function updateFilterCounts() {
-  const count = activeFilterCount();
-  $("filterCount").textContent = String(count);
-  $("genreSelectedCount").textContent = String(state.selectedGenres.size);
-  $("actorSelectedCount").textContent = String(state.selectedActors.size);
-  $("directorSelectedCount").textContent = String(state.selectedDirectors.size);
+function updateCounts() {
+  els.filterCount.textContent = String(activeCount());
+  els.genreSelectedCount.textContent = String(state.selected.genre.size);
+  els.actorSelectedCount.textContent = String(state.selected.actor.size);
+  els.directorSelectedCount.textContent = String(state.selected.director.size);
 }
 
-const desktopFiltersQuery = window.matchMedia("(min-width: 760px)");
-let lastFocusedElement = null;
-
-function syncFilterPanelAccessibility() {
-  const isDesktop = desktopFiltersQuery.matches;
-  $("filterPanel").setAttribute("aria-hidden", isDesktop || state.filtersOpen ? "false" : "true");
-  if (isDesktop) {
-    $("filterBackdrop").hidden = true;
-    document.body.classList.remove("filters-open");
-  }
+function setActivePanel(category) {
+  state.activePanel = category;
+  document.querySelectorAll("[data-filter-category]").forEach(button => {
+    const active = button.dataset.filterCategory === category;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-filter-panel]").forEach(panel => {
+    panel.hidden = panel.dataset.filterPanel !== category;
+  });
 }
 
 function openFilters() {
-  lastFocusedElement = document.activeElement;
+  state.lastFocus = document.activeElement;
   state.filtersOpen = true;
-  $("filterPanel").classList.add("is-open");
-  $("filterBackdrop").hidden = false;
+  els.filterPanel.classList.add("is-open");
+  els.filterBackdrop.hidden = false;
   document.body.classList.add("filters-open");
-  syncFilterPanelAccessibility();
-  requestAnimationFrame(() => $("closeFilters").focus());
+  syncFilterA11y();
+  requestAnimationFrame(() => els.closeFilters.focus());
 }
 
 function closeFilters() {
   state.filtersOpen = false;
-  $("filterPanel").classList.remove("is-open");
-  $("filterBackdrop").hidden = true;
+  els.filterPanel.classList.remove("is-open");
+  els.filterBackdrop.hidden = true;
   document.body.classList.remove("filters-open");
-  syncFilterPanelAccessibility();
-
-  if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
-    lastFocusedElement.focus();
-  }
-  lastFocusedElement = null;
+  syncFilterA11y();
+  if (state.lastFocus?.focus) state.lastFocus.focus();
+  state.lastFocus = null;
 }
 
-function clearAllFilters() {
-  state.selectedGenres.clear();
-  state.selectedActors.clear();
-  state.selectedDirectors.clear();
+function syncFilterA11y() {
+  const visible = DESKTOP_QUERY.matches || state.filtersOpen;
+  els.filterPanel.setAttribute("aria-hidden", String(!visible));
+  if (DESKTOP_QUERY.matches) {
+    els.filterBackdrop.hidden = true;
+    document.body.classList.remove("filters-open");
+  }
+}
+
+function clearFilters() {
   state.search = "";
-  state.actorListSearch = "";
-  state.directorListSearch = "";
-  state.genreMatchMode = "any";
-  state.actorMatchMode = "any";
-  state.directorMatchMode = "any";
-  $("searchInput").value = "";
-  $("actorFilterSearch").value = "";
-  $("directorFilterSearch").value = "";
-  $("genreMatchMode").value = "any";
-  $("actorMatchMode").value = "any";
-  $("directorMatchMode").value = "any";
-  renderFilterLists();
+  state.filterSearch.actor = "";
+  state.filterSearch.director = "";
+  state.matchMode = { genre: "any", actor: "any", director: "any" };
+  for (const set of Object.values(state.selected)) set.clear();
+
+  els.searchInput.value = "";
+  els.actorFilterSearch.value = "";
+  els.directorFilterSearch.value = "";
+  els.genreMatchMode.value = "any";
+  els.actorMatchMode.value = "any";
+  els.directorMatchMode.value = "any";
   render();
 }
 
-function removeFilter(type, value) {
-  if (type === "genre") state.selectedGenres.delete(value);
-  if (type === "actor") state.selectedActors.delete(value);
-  if (type === "director") state.selectedDirectors.delete(value);
-  if (type === "search") {
+function removeFilter(category, value) {
+  if (category === "search") {
     state.search = "";
-    $("searchInput").value = "";
+    els.searchInput.value = "";
+  } else {
+    state.selected[category].delete(value);
   }
-  renderFilterLists();
   render();
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+function bindEvents() {
+  els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
+  els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
+  els.genreMatchMode.addEventListener("change", event => { state.matchMode.genre = event.target.value; render(); });
+  els.actorMatchMode.addEventListener("change", event => { state.matchMode.actor = event.target.value; render(); });
+  els.directorMatchMode.addEventListener("change", event => { state.matchMode.director = event.target.value; render(); });
+  els.actorFilterSearch.addEventListener("input", event => { state.filterSearch.actor = event.target.value; renderFilterLists(); });
+  els.directorFilterSearch.addEventListener("input", event => { state.filterSearch.director = event.target.value; renderFilterLists(); });
 
-$("searchInput").addEventListener("input", event => {
-  state.search = event.target.value;
-  render();
-});
+  els.clearFilters.addEventListener("click", clearFilters);
+  els.reloadData.addEventListener("click", loadSheet);
+  els.openFilters.addEventListener("click", openFilters);
+  els.closeFilters.addEventListener("click", closeFilters);
+  els.applyFilters.addEventListener("click", closeFilters);
+  els.filterBackdrop.addEventListener("click", closeFilters);
 
-$("sortSelect").addEventListener("change", event => {
-  state.sort = event.target.value;
-  render();
-});
-
-$("genreMatchMode").addEventListener("change", event => {
-  state.genreMatchMode = event.target.value;
-  render();
-});
-
-$("actorMatchMode").addEventListener("change", event => {
-  state.actorMatchMode = event.target.value;
-  render();
-});
-
-$("directorMatchMode").addEventListener("change", event => {
-  state.directorMatchMode = event.target.value;
-  render();
-});
-
-document.querySelectorAll("[data-scroll-target]").forEach(button => {
-  button.addEventListener("click", () => {
-    const target = $(button.dataset.scrollTarget);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  els.activeFilters.addEventListener("click", event => {
+    const button = event.target.closest("button[data-category]");
+    if (button) removeFilter(button.dataset.category, button.dataset.value);
   });
-});
 
-$("actorFilterSearch").addEventListener("input", event => {
-  state.actorListSearch = event.target.value;
-  renderFilterLists();
-});
+  document.querySelectorAll("[data-filter-category]").forEach(button => {
+    button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory));
+  });
 
-$("directorFilterSearch").addEventListener("input", event => {
-  state.directorListSearch = event.target.value;
-  renderFilterLists();
-});
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && state.filtersOpen) closeFilters();
+  });
 
-$("clearFilters").addEventListener("click", clearAllFilters);
-$("reloadData").addEventListener("click", loadSheet);
-$("openFilters").addEventListener("click", openFilters);
-$("closeFilters").addEventListener("click", closeFilters);
-$("applyFilters").addEventListener("click", closeFilters);
-$("filterBackdrop").addEventListener("click", closeFilters);
-
-$("activeFilters").addEventListener("click", event => {
-  const button = event.target.closest("button[data-filter-type]");
-  if (!button) return;
-  removeFilter(button.dataset.filterType, button.dataset.filterValue);
-});
-
-document.addEventListener("keydown", event => {
-  if (event.key === "Escape" && state.filtersOpen) closeFilters();
-});
-
-if (typeof desktopFiltersQuery.addEventListener === "function") {
-  desktopFiltersQuery.addEventListener("change", syncFilterPanelAccessibility);
-} else if (typeof desktopFiltersQuery.addListener === "function") {
-  desktopFiltersQuery.addListener(syncFilterPanelAccessibility);
+  if (DESKTOP_QUERY.addEventListener) DESKTOP_QUERY.addEventListener("change", syncFilterA11y);
+  else DESKTOP_QUERY.addListener(syncFilterA11y);
 }
 
-syncFilterPanelAccessibility();
+cacheEls();
+bindEvents();
+setActivePanel(state.activePanel);
+syncFilterA11y();
 loadSheet();

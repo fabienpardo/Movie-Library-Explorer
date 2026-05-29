@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b0f1f" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Movies" />
   <title>Movie Library Explorer</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css?v=6.0" />
 </head>
 <body>
   <header class="app-header">
@@ -18,7 +23,7 @@
         <p class="eyebrow">Movie library</p>
         <h1>Explorer</h1>
       </div>
-      <p class="app-subtitle">Filter by genre, actor, and director. Sort by runtime, IMDb rating, title, year, or country.</p>
+      <p class="app-subtitle">Filter, sort, explore.</p>
     </div>
   </header>
 
@@ -35,9 +40,9 @@
 
       <div class="filter-panel__body">
         <nav class="filter-jump-nav" aria-label="Filter categories">
-          <button class="filter-jump-nav__button" type="button" data-scroll-target="genreSection">Genres</button>
-          <button class="filter-jump-nav__button" type="button" data-scroll-target="actorSection">Actors</button>
-          <button class="filter-jump-nav__button" type="button" data-scroll-target="directorSection">Directors</button>
+          <button class="filter-jump-nav__button is-active" type="button" data-filter-category="genre" aria-pressed="true">Genres</button>
+          <button class="filter-jump-nav__button" type="button" data-filter-category="actor" aria-pressed="false">Actors</button>
+          <button class="filter-jump-nav__button" type="button" data-filter-category="director" aria-pressed="false">Directors</button>
         </nav>
 
         <div class="filter-help">
@@ -49,7 +54,7 @@
           <button id="reloadData" class="secondary-button" type="button">Reload data</button>
         </div>
 
-        <section id="genreSection" class="filter-section" aria-labelledby="genreHeading">
+        <section id="genreSection" class="filter-section filter-category-panel" data-filter-panel="genre" aria-labelledby="genreHeading">
           <div class="filter-section__heading">
             <h3 id="genreHeading">Genres</h3>
             <span id="genreSelectedCount" class="count-badge">0</span>
@@ -65,7 +70,7 @@
           <div id="genreList" class="filter-list">Loading…</div>
         </section>
 
-        <section id="actorSection" class="filter-section" aria-labelledby="actorHeading">
+        <section id="actorSection" class="filter-section filter-category-panel" data-filter-panel="actor" hidden aria-labelledby="actorHeading">
           <div class="filter-section__heading">
             <h3 id="actorHeading">Actors</h3>
             <span id="actorSelectedCount" class="count-badge">0</span>
@@ -83,7 +88,7 @@
           <div id="actorList" class="filter-list filter-list--searchable">Loading…</div>
         </section>
 
-        <section id="directorSection" class="filter-section" aria-labelledby="directorHeading">
+        <section id="directorSection" class="filter-section filter-category-panel" data-filter-panel="director" hidden aria-labelledby="directorHeading">
           <div class="filter-section__heading">
             <h3 id="directorHeading">Directors</h3>
             <span id="directorSelectedCount" class="count-badge">0</span>
@@ -138,6 +143,6 @@
     </section>
   </main>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=6.0"></script>
 </body>
 </html>
