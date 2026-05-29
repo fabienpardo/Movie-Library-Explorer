@@ -472,3 +472,430 @@ h1 {
     background: rgba(25, 34, 55, 0.94);
   }
 }
+
+/* v6.1: standard-to-compact mobile typography. */
+@media (max-width: 559px) {
+  :root {
+    --tap: 44px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 28px;
+  }
+
+  .app-header {
+    padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
+  }
+
+  .app-header__inner {
+    padding: 14px 16px;
+    border-radius: 24px;
+  }
+
+  .eyebrow {
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+
+  h1 {
+    font-size: clamp(34px, 11vw, 48px);
+    letter-spacing: -0.06em;
+  }
+
+  .app-subtitle {
+    margin-top: 7px;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .app-shell {
+    padding-inline: 10px;
+  }
+
+  .mobile-toolbar {
+    gap: 8px;
+    margin: 0 -10px 14px;
+    padding: 10px;
+  }
+
+  input[type="search"],
+  select {
+    min-height: 44px;
+    padding: 9px 13px;
+    font-size: 15px;
+  }
+
+  select {
+    background-position: calc(100% - 21px) 18px, calc(100% - 14px) 18px, 0 0;
+  }
+
+  .mobile-filter-button {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .button-badge,
+  .count-badge {
+    min-width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+
+  .summary-card {
+    margin-bottom: 14px;
+    padding: 15px 18px;
+    gap: 5px;
+    font-size: 17px;
+  }
+
+  .active-filters {
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+
+  .active-filter-chip {
+    padding: 6px 7px 6px 10px;
+    font-size: 13px;
+  }
+
+  .movie-grid {
+    gap: 13px;
+  }
+
+  .movie-card {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .movie-card h2 {
+    font-size: clamp(20px, 5.5vw, 24px);
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+  }
+
+  .original-title {
+    margin-top: 5px;
+    font-size: 16px;
+    line-height: 1.22;
+  }
+
+  .badge-row,
+  .chips {
+    gap: 7px;
+    margin-top: 13px;
+  }
+
+  .meta-badge,
+  .genre-chip {
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 14px;
+  }
+
+  .credits {
+    gap: 6px;
+    margin-top: 13px;
+    font-size: 15px;
+    line-height: 1.35;
+  }
+
+  .filter-panel {
+    max-height: min(86svh, 720px);
+    padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0;
+  }
+
+  .filter-panel__header h2 {
+    font-size: 28px;
+  }
+
+  .icon-button {
+    min-width: 44px;
+    height: 44px;
+    font-size: 28px;
+  }
+
+  .filter-jump-nav {
+    gap: 7px;
+  }
+
+  .filter-jump-nav__button {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .filter-help,
+  .match-mode-card {
+    padding: 11px;
+    font-size: 13px;
+  }
+
+  .filter-option__content {
+    min-height: 36px;
+    padding: 7px 11px;
+    font-size: 14px;
+  }
+}
+
+/* v6.2: compact desktop/tablet scale and smaller app header. */
+@media (min-width: 760px) {
+  :root {
+    --tap: 42px;
+    --radius-md: 16px;
+    --radius-lg: 22px;
+    --radius-xl: 28px;
+  }
+
+  .app-header {
+    padding: 14px 24px 10px;
+  }
+
+  .app-header__inner {
+    grid-template-columns: auto 1fr;
+    gap: 22px;
+    padding: 16px 24px;
+    border-radius: 24px;
+  }
+
+  h1 {
+    font-size: clamp(38px, 4.2vw, 54px);
+    letter-spacing: -0.06em;
+  }
+
+  .eyebrow {
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+
+  .app-subtitle {
+    justify-self: end;
+    max-width: 360px;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .app-shell {
+    grid-template-columns: 250px minmax(0, 1fr);
+    gap: 16px;
+    padding: 0 24px 34px;
+  }
+
+  .mobile-toolbar {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding: 7px;
+  }
+
+  input[type="search"],
+  select {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+
+  select {
+    background-position: calc(100% - 20px) 17px, calc(100% - 13px) 17px, 0 0;
+  }
+
+  .summary-card {
+    margin-bottom: 14px;
+    padding: 11px 16px;
+    border-radius: 18px;
+    font-size: 14px;
+  }
+
+  .active-filters {
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+
+  .active-filter-chip {
+    padding: 5px 7px 5px 10px;
+    font-size: 12px;
+  }
+
+  .movie-grid {
+    gap: 14px;
+  }
+
+  .movie-card {
+    padding: 16px;
+    border-radius: 22px;
+  }
+
+  .movie-card h2 {
+    font-size: 20px;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+  }
+
+  .original-title {
+    margin-top: 5px;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .badge-row,
+  .chips {
+    gap: 7px;
+    margin-top: 13px;
+  }
+
+  .meta-badge,
+  .genre-chip {
+    min-height: 28px;
+    padding: 5px 9px;
+    font-size: 13px;
+  }
+
+  .credits {
+    gap: 5px;
+    margin-top: 13px;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .filter-panel {
+    top: 12px;
+    padding: 14px 12px;
+    border-radius: 22px;
+  }
+
+  .filter-panel__header {
+    padding-bottom: 10px;
+  }
+
+  .filter-panel__header h2 {
+    font-size: 24px;
+  }
+
+  .filter-panel__body {
+    padding-top: 10px;
+  }
+
+  .filter-jump-nav {
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+
+  .filter-jump-nav__button {
+    min-height: 34px;
+    font-size: 12px;
+  }
+
+  .filter-help,
+  .match-mode-card {
+    padding: 10px;
+    border-radius: 16px;
+    font-size: 12px;
+  }
+
+  .button-row {
+    gap: 8px;
+    margin: 12px 0 16px;
+  }
+
+  .secondary-button {
+    min-height: 36px;
+    font-size: 13px;
+  }
+
+  .filter-section {
+    margin-top: 13px;
+  }
+
+  .filter-section h3 {
+    font-size: 15px;
+  }
+
+  .match-mode-card label {
+    font-size: 10px;
+  }
+
+  .hint {
+    font-size: 11px;
+  }
+
+  .filter-option__content {
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 1180px) {
+  .app-shell {
+    grid-template-columns: 270px minmax(0, 1fr);
+    gap: 18px;
+  }
+}
+
+@media (min-width: 1500px) {
+  .app-shell,
+  .app-header__inner {
+    max-width: 1240px;
+  }
+}
+
+@media (max-width: 559px) {
+  .movie-card h2 {
+    font-size: clamp(19px, 5.1vw, 23px);
+  }
+
+  .summary-card {
+    font-size: 16px;
+  }
+}
+
+
+/* v6.4: actor/director filters are readable list rows, not truncated grid chips. */
+#actorList,
+#directorList {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+
+#actorList .filter-option,
+#directorList .filter-option {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+#actorList .filter-option__content,
+#directorList .filter-option__content {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 11px;
+  border-radius: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+#actorList .filter-option__label,
+#directorList .filter-option__label {
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.2;
+}
+
+#actorList .filter-option__count,
+#directorList .filter-option__count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+@media (max-width: 559px) {
+  #actorList .filter-option__content,
+  #directorList .filter-option__content {
+    min-height: 38px;
+    padding: 8px 12px;
+  }
+}

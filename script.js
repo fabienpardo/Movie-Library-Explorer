@@ -38,7 +38,7 @@ const fieldConfig = {
     listId: "genreList",
     countId: "genreSelectedCount",
     parser: parseList,
-    empty: "No genres available for the current filters"
+    empty: "Aucun genre disponible pour les filtres actuels"
   },
   actor: {
     column: "actors",
@@ -46,7 +46,7 @@ const fieldConfig = {
     countId: "actorSelectedCount",
     parser: parseList,
     searchKey: "actor",
-    empty: "No actors available for the current filters"
+    empty: "Aucun acteur disponible pour les filtres actuels"
   },
   director: {
     column: "directors",
@@ -54,9 +54,13 @@ const fieldConfig = {
     countId: "directorSelectedCount",
     parser: parseList,
     searchKey: "director",
-    empty: "No directors available for the current filters"
+    empty: "Aucun réalisateur disponible pour les filtres actuels"
   }
 };
+
+function categoryLabel(category) {
+  return { genre: "Genre", actor: "Acteur", director: "Réalisateur" }[category] || category;
+}
 
 function cacheEls() {
   [
@@ -116,12 +120,12 @@ function parseRuntime(value) {
 }
 
 function formatRuntime(minutes) {
-  if (!Number.isFinite(minutes)) return "Runtime unknown";
+  if (!Number.isFinite(minutes)) return "Durée inconnue";
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
-  if (h && m) return `${h}h ${m}m`;
-  if (h) return `${h}h`;
-  return `${m}m`;
+  if (h && m) return `${h} h ${m}`;
+  if (h) return `${h} h`;
+  return `${m} min`;
 }
 
 function parseCsv(text) {
@@ -162,9 +166,9 @@ function parseCsv(text) {
 
 function csvToTable(text) {
   const records = parseCsv(text);
-  if (records.length < 2) throw new Error("The CSV endpoint returned no usable rows.");
+  if (records.length < 2) throw new Error("Le point d’accès CSV ne contient aucune ligne exploitable.");
 
-  const labels = records[0].map((label, index) => String(label || "").replace(/^\uFEFF/, "").trim() || `Column ${index + 1}`);
+  const labels = records[0].map((label, index) => String(label || "").replace(/^\uFEFF/, "").trim() || `Colonne ${index + 1}`);
   const rows = records.slice(1).map(record => Object.fromEntries(labels.map((label, index) => [label, record[index] ?? ""])));
   return { labels, rows };
 }
@@ -181,7 +185,7 @@ function detectColumns(labels) {
   };
 
   const title = pick(columnAliases.title, ["original title"]);
-  const warnings = title ? [] : [`Title column was not detected. Falling back to first column: "${labels[0]}".`];
+  const warnings = title ? [] : [`La colonne de titre n’a pas été détectée. Utilisation de la première colonne : "${labels[0]}".`];
 
   return {
     columns: {
@@ -209,10 +213,10 @@ async function loadSheet() {
 
   try {
     const response = await fetch(SHEET_CSV_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Could not load the CSV endpoint. HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(`Impossible de charger le point d’accès CSV. HTTP ${response.status}.`);
 
     const text = await response.text();
-    if (/<!doctype html|<html[\s>]/i.test(text)) throw new Error("Google returned HTML instead of CSV. Check that the sheet tab is still published.");
+    if (/<!doctype html|<html[\s>]/i.test(text)) throw new Error("Google a renvoyé du HTML au lieu du CSV. Vérifiez que l’onglet est toujours publié.");
 
     const { labels, rows } = csvToTable(text);
     const detected = detectColumns(labels);
@@ -229,16 +233,16 @@ async function loadSheet() {
 }
 
 function showLoading() {
-  els.status.textContent = "Loading movie library…";
+  els.status.textContent = "Chargement de la bibliothèque…";
   els.diagnostics.hidden = true;
   els.movieGrid.innerHTML = "";
-  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "Loading…"; });
+  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "Chargement…"; });
 }
 
 function showError(message) {
   els.status.innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
   els.movieGrid.innerHTML = "";
-  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "No data loaded"; });
+  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "Aucune donnée chargée"; });
 }
 
 function renderDiagnostics() {
@@ -246,7 +250,7 @@ function renderDiagnostics() {
   const missing = expected.filter(field => !state.columns[field]);
   const lines = [];
 
-  if (missing.length) lines.push(`Missing expected fields: ${missing.join(", ")}`);
+  if (missing.length) lines.push(`Champs attendus manquants : ${missing.join(", ")}`);
   lines.push(...state.warnings);
 
   if (!lines.length) {
@@ -254,9 +258,9 @@ function renderDiagnostics() {
     return;
   }
 
-  lines.unshift("Column detection warning.");
-  lines.push(`Detected columns: ${state.labels.join(", ")}`);
-  lines.push("Update columnAliases near the top of script.js if needed.");
+  lines.unshift("Avertissement de détection des colonnes.");
+  lines.push(`Colonnes détectées : ${state.labels.join(", ")}`);
+  lines.push("Mettez à jour columnAliases en haut de script.js si nécessaire.");
   els.diagnostics.textContent = lines.join("\n");
   els.diagnostics.hidden = false;
 }
@@ -341,7 +345,7 @@ function renderFilterList(category) {
   counts = sortedOptions(searchOptionCounts(counts, category), category);
 
   if (!counts.length) {
-    container.textContent = columnDetected ? cfg.empty : `No ${category} column detected`;
+    container.textContent = columnDetected ? cfg.empty : `Colonne ${categoryLabel(category).toLowerCase()} non détectée`;
     return;
   }
 
@@ -359,7 +363,7 @@ function renderFilterList(category) {
           <span class="filter-option__count">${count}</span>
         </span>
       </label>`;
-  }).join("") + (hidden > 0 ? `<p class="hint">+${hidden} more. Search to narrow the list.</p>` : "");
+  }).join("") + (hidden > 0 ? `<p class="hint">+${hidden} autres. Recherchez pour réduire la liste.</p>` : "");
 
   container.querySelectorAll("input").forEach(input => {
     input.addEventListener("change", () => {
@@ -406,7 +410,7 @@ function compare(a, b, multiplier) {
 }
 
 function displayTitle(row) {
-  return cell(row, "title") || cell(row, "originalTitle") || "Untitled";
+  return cell(row, "title") || cell(row, "originalTitle") || "Sans titre";
 }
 
 function displayOriginalTitle(row) {
@@ -423,12 +427,12 @@ function render() {
   }, 0);
 
   els.status.innerHTML = `
-    <span><strong>${rows.length}</strong> / ${state.rows.length} movies</span>
-    <span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> total runtime</span>`;
+    <span><strong>${rows.length}</strong> / ${state.rows.length} films</span>
+    <span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> durée totale</span>`;
 
   renderActiveFilters();
   renderFilterLists();
-  els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `<div class="empty">No movies match the current filters.</div>`;
+  els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `<div class="empty">Aucun film ne correspond aux filtres actuels.</div>`;
 }
 
 function renderMovieCard(row) {
@@ -457,8 +461,8 @@ function renderMovieCard(row) {
       </header>
       <div class="badge-row">${meta}</div>
       <div class="credits">
-        ${directors.length ? `<p><strong>Director:</strong> ${highlightList(directors, state.selected.director)}</p>` : ""}
-        ${actors.length ? `<p class="actors-line"><strong>Actors:</strong> ${highlightList(actors, state.selected.actor)}</p>` : ""}
+        ${directors.length ? `<p><strong>Réalisation :</strong> ${highlightList(directors, state.selected.director)}</p>` : ""}
+        ${actors.length ? `<p class="actors-line"><strong>Acteurs :</strong> ${highlightList(actors, state.selected.actor)}</p>` : ""}
       </div>
       <div class="chips">${genres.map(genre => `<span class="genre-chip ${state.selected.genre.has(genre) ? "genre-chip--selected" : ""}">${escapeHtml(genre)}</span>`).join("")}</div>
     </article>`;
@@ -481,15 +485,15 @@ function highlightList(values, selected) {
 
 function renderActiveFilters() {
   const items = [];
-  if (state.search) items.push({ group: "Search", category: "search", value: state.search });
-  for (const [category, label] of [["genre", "Genre"], ["actor", "Actor"], ["director", "Director"]]) {
+  if (state.search) items.push({ group: "Recherche", category: "search", value: state.search });
+  for (const [category, label] of [["genre", "Genre"], ["actor", "Acteur"], ["director", "Réalisateur"]]) {
     for (const value of state.selected[category]) items.push({ group: label, category, value });
   }
 
   els.activeFilters.innerHTML = items.map(item => `
     <span class="active-filter-chip">
       <span>${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>
-      <button class="filter-remove" type="button" data-category="${item.category}" data-value="${escapeHtml(item.value)}" aria-label="Remove ${escapeHtml(item.group)} filter">×</button>
+      <button class="filter-remove" type="button" data-category="${item.category}" data-value="${escapeHtml(item.value)}" aria-label="Retirer le filtre ${escapeHtml(item.group)}">×</button>
     </span>`).join("");
 }
 

@@ -1,41 +1,32 @@
-# Movie Library Explorer
+# Explorateur de films
 
-Static web app for browsing a published Google Sheets movie library.
+Application statique GitHub Pages pour explorer une bibliothèque de films publiée depuis Google Sheets.
 
-## Features
+## Fonctionnalités
 
-- Loads movies from the published Google Sheet CSV endpoint.
-- Search by text.
-- Filter by genre, actor, and director.
-- Per-category match mode: `Any` or `All`.
-- Sort by title, original title, runtime, IMDb rating, year, or country.
-- Displays title, original title, IMDb rating, runtime, year, main country, director, actors, and genres.
-- Highlights selected filters inside movie cards.
-- IMDb rating colors:
-  - green: `8.0+`
-  - yellow: `7.0–7.9`
-  - red: below `7.0`
-- Mobile-first layout with an iPhone-friendly filter drawer.
-- Desktop layout with a permanent filter sidebar.
-- Home-screen icons for iOS / PWA usage.
+- Rechercher des films.
+- Filtrer par genre, acteur et réalisateur.
+- Choisir le mode de correspondance ``Au moins un` / `Tous` par catégorie.
+- Trier par titre, titre original, durée, note IMDb, année ou pays.
+- Afficher le titre, le titre original, la note IMDb, la durée, l’année, le pays principal, la réalisation, les acteurs et les genres.
+- Mettre en évidence les filtres sélectionnés dans les cartes de films.
+- Colorer les notes IMDb : vert pour `8.0+`, jaune pour `7.0–7.9`, rouge sous `7.0`.
+- Utiliser un panneau de filtres sur mobile et une barre latérale sur desktop.
+- Inclure les icônes iOS/PWA.
 
-## Run locally
-
-From this folder:
+## Lancer en local
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Open:
+Ouvrir `http://localhost:8000`.
 
-```text
-http://localhost:8000
-```
+## Déployer
 
-## Deploy on GitHub Pages
+Déposer tous les fichiers à la racine du dépôt, puis activer GitHub Pages depuis la branche principale et le dossier racine.
 
-Upload these files to the repository root and enable GitHub Pages from the main branch/root folder:
+Fichiers requis :
 
 - `index.html`
 - `style.css`
@@ -46,24 +37,15 @@ Upload these files to the repository root and enable GitHub Pages from the main 
 - `icon-512.png`
 - `manifest.webmanifest`
 
-## Update sheet column mapping
+## Adapter les colonnes
 
-If the app warns that a column is missing, edit `columnAliases` near the top of `script.js`.
+Si l’application signale une colonne manquante, modifier `columnAliases` en haut de `script.js` et ajouter le nom exact de la colonne Google Sheets.
 
-Example:
+## Cache de l’icône iPhone
 
-```js
-imdbRating: ["imdb rating", "imdb", "imdb score"]
-```
+Si l’icône de l’écran d’accueil ne se met pas à jour, supprimer l’app ajoutée à l’écran d’accueil iOS, puis l’ajouter à nouveau depuis Safari.
 
-Add the exact column name from the sheet if needed.
 
-## iPhone home-screen icon
+## Note v6.6
 
-If the icon does not update after deployment:
-
-1. Delete the existing home-screen app.
-2. Open the GitHub Pages URL in Safari.
-3. Add it to the home screen again.
-
-Safari/iOS may cache the first installed icon.
+Libellés de correspondance raccourcis pour éviter la troncature dans les menus.

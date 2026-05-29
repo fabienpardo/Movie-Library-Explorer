@@ -1,7 +1,7 @@
 {
-  "name": "Movie Library Explorer",
-  "short_name": "Movies",
-  "description": "Explore a personal movie library by genre, actor, director, runtime, country, and IMDb rating.",
+  "name": "Explorateur de films",
+  "short_name": "Films",
+  "description": "Explorez une bibliothèque de films par genre, acteur, réalisateur, durée, pays et note IMDb.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
