@@ -28,33 +28,35 @@
   </header>
 
   <main class="app-shell">
-    <aside id="filterPanel" class="filter-panel" aria-label="Filtres des films">
+    <aside id="filterPanel" class="filter-panel" aria-labelledby="filterTitle" aria-hidden="true" inert>
       <div class="filter-panel__handle" aria-hidden="true"></div>
       <div class="filter-panel__header">
         <div>
           <p class="eyebrow">Affiner</p>
-          <h2>Filtres</h2>
+          <h2 id="filterTitle">Filtres <span id="desktopFilterCount" class="count-badge filter-total-count">0</span></h2>
         </div>
         <button id="closeFilters" class="icon-button" type="button" aria-label="Fermer les filtres">×</button>
       </div>
 
       <div class="filter-panel__body">
-        <nav class="filter-jump-nav" aria-label="Catégories de filtres">
-          <button class="filter-jump-nav__button is-active" type="button" data-filter-category="genre" aria-pressed="true">Genres</button>
-          <button class="filter-jump-nav__button" type="button" data-filter-category="actor" aria-pressed="false">Acteurs</button>
-          <button class="filter-jump-nav__button" type="button" data-filter-category="director" aria-pressed="false">Réalisateurs</button>
+        <nav class="filter-jump-nav" role="tablist" aria-label="Catégories de filtres">
+          <button id="genreTab" class="filter-jump-nav__button is-active" type="button" role="tab" data-filter-category="genre" aria-selected="true" aria-controls="genreSection">Genres</button>
+          <button id="actorTab" class="filter-jump-nav__button" type="button" role="tab" data-filter-category="actor" aria-selected="false" aria-controls="actorSection">Acteurs</button>
+          <button id="directorTab" class="filter-jump-nav__button" type="button" role="tab" data-filter-category="director" aria-selected="false" aria-controls="directorSection">Réalisateurs</button>
         </nav>
 
         <div class="filter-help">
           <strong>Correspondance :</strong> les catégories se cumulent. Dans chaque catégorie, choisissez si une ou toutes les valeurs doivent correspondre.
         </div>
 
+        <div id="filterSelectionSummary" class="filter-selection-summary">Aucun filtre sélectionné</div>
+
         <div class="button-row">
           <button id="clearFilters" class="secondary-button" type="button">Tout effacer</button>
           <button id="reloadData" class="secondary-button" type="button">Recharger les données</button>
         </div>
 
-        <section id="genreSection" class="filter-section filter-category-panel" data-filter-panel="genre" aria-labelledby="genreHeading">
+        <section id="genreSection" class="filter-section filter-category-panel" role="tabpanel" data-filter-panel="genre" aria-labelledby="genreTab">
           <div class="filter-section__heading">
             <h3 id="genreHeading">Genres</h3>
             <span id="genreSelectedCount" class="count-badge">0</span>
@@ -70,7 +72,7 @@
           <div id="genreList" class="filter-list">Chargement…</div>
         </section>
 
-        <section id="actorSection" class="filter-section filter-category-panel" data-filter-panel="actor" hidden aria-labelledby="actorHeading">
+        <section id="actorSection" class="filter-section filter-category-panel" role="tabpanel" data-filter-panel="actor" hidden aria-labelledby="actorTab">
           <div class="filter-section__heading">
             <h3 id="actorHeading">Acteurs</h3>
             <span id="actorSelectedCount" class="count-badge">0</span>
@@ -88,7 +90,7 @@
           <div id="actorList" class="filter-list filter-list--searchable">Chargement…</div>
         </section>
 
-        <section id="directorSection" class="filter-section filter-category-panel" data-filter-panel="director" hidden aria-labelledby="directorHeading">
+        <section id="directorSection" class="filter-section filter-category-panel" role="tabpanel" data-filter-panel="director" hidden aria-labelledby="directorTab">
           <div class="filter-section__heading">
             <h3 id="directorHeading">Réalisateurs</h3>
             <span id="directorSelectedCount" class="count-badge">0</span>
@@ -108,7 +110,7 @@
       </div>
 
       <div class="filter-panel__footer">
-        <button id="applyFilters" class="primary-button" type="button">Afficher les résultats</button>
+        <button id="applyFilters" class="primary-button" type="button">Voir les résultats</button>
       </div>
     </aside>
 
@@ -116,10 +118,10 @@
 
     <section class="content-panel" aria-live="polite">
       <div class="mobile-toolbar">
-        <label class="visually-hidden" for="searchInput">Rechercher des films</label>
+        <label class="toolbar-label" for="searchInput">Recherche</label>
         <input id="searchInput" type="search" placeholder="Rechercher des films…" autocomplete="off" />
 
-        <label class="visually-hidden" for="sortSelect">Trier les films</label>
+        <label class="toolbar-label" for="sortSelect">Tri</label>
         <select id="sortSelect">
           <option value="title-asc">Titre A → Z</option>
           <option value="originalTitle-asc">Titre original A → Z</option>

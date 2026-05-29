@@ -2,6 +2,7 @@ const PUBLISHED_SHEET_ID = "2PACX-1vR0f-YQic-WwbzgTdFQroIy9T1P14usd5ysqySDfuM0Hi
 const GID = "70337195";
 const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${GID}&single=true&output=csv`;
 const DESKTOP_QUERY = window.matchMedia("(min-width: 760px)");
+const FILTER_FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), select:not([disabled])";
 
 // Update these aliases if the Google Sheet column names change.
 const columnAliases = {
@@ -27,6 +28,7 @@ const state = {
   filterSearch: { actor: "", director: "" },
   matchMode: { genre: "any", actor: "any", director: "any" },
   selected: { genre: new Set(), actor: new Set(), director: new Set() },
+  optionLimit: { actor: 80, director: 80 },
   activePanel: "genre",
   filtersOpen: false,
   lastFocus: null
@@ -66,9 +68,10 @@ function cacheEls() {
   [
     "status", "diagnostics", "movieGrid", "activeFilters", "filterPanel", "filterBackdrop",
     "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
-    "searchInput", "sortSelect", "genreMatchMode", "actorMatchMode", "directorMatchMode",
-    "actorFilterSearch", "directorFilterSearch", "genreList", "actorList", "directorList",
-    "genreSelectedCount", "actorSelectedCount", "directorSelectedCount"
+    "desktopFilterCount", "filterSelectionSummary", "searchInput", "sortSelect",
+    "genreMatchMode", "actorMatchMode", "directorMatchMode", "actorFilterSearch",
+    "directorFilterSearch", "genreList", "actorList", "directorList", "genreSelectedCount",
+    "actorSelectedCount", "directorSelectedCount"
   ].forEach(id => { els[id] = document.getElementById(id); });
 }
 
@@ -208,6 +211,40 @@ function cell(row, field) {
   return column ? row[column] ?? "" : "";
 }
 
+function resetLoadedData() {
+  state.rows = [];
+  state.labels = [];
+  state.columns = {};
+  state.warnings = [];
+}
+
+function resetFilterState() {
+  state.search = "";
+  state.filterSearch.actor = "";
+  state.filterSearch.director = "";
+  state.matchMode = { genre: "any", actor: "any", director: "any" };
+  state.optionLimit = { actor: 80, director: 80 };
+  for (const set of Object.values(state.selected)) set.clear();
+}
+
+function syncFilterControls() {
+  els.searchInput.value = state.search;
+  els.actorFilterSearch.value = state.filterSearch.actor;
+  els.directorFilterSearch.value = state.filterSearch.director;
+  els.genreMatchMode.value = state.matchMode.genre;
+  els.actorMatchMode.value = state.matchMode.actor;
+  els.directorMatchMode.value = state.matchMode.director;
+}
+
+function resetAfterLoadFailure() {
+  resetLoadedData();
+  resetFilterState();
+  syncFilterControls();
+  renderActiveFilters();
+  updateCounts();
+  els.diagnostics.hidden = true;
+}
+
 async function loadSheet() {
   showLoading();
 
@@ -228,6 +265,7 @@ async function loadSheet() {
     renderDiagnostics();
     render();
   } catch (error) {
+    resetAfterLoadFailure();
     showError(`${error.message}\n\nSource: ${SHEET_CSV_URL}`);
   }
 }
@@ -240,7 +278,9 @@ function showLoading() {
 }
 
 function showError(message) {
-  els.status.innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
+  els.status.innerHTML = `
+    <span class="error">${escapeHtml(message)}</span>
+    <button class="secondary-button inline-action" type="button" data-action="reload">Réessayer</button>`;
   els.movieGrid.innerHTML = "";
   [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "Aucune donnée chargée"; });
 }
@@ -261,7 +301,13 @@ function renderDiagnostics() {
   lines.unshift("Avertissement de détection des colonnes.");
   lines.push(`Colonnes détectées : ${state.labels.join(", ")}`);
   lines.push("Mettez à jour columnAliases en haut de script.js si nécessaire.");
-  els.diagnostics.textContent = lines.join("\n");
+
+  els.diagnostics.innerHTML = `
+    <strong>Certaines informations de films peuvent être indisponibles.</strong>
+    <details>
+      <summary>Détails techniques</summary>
+      <pre>${escapeHtml(lines.join("\n"))}</pre>
+    </details>`;
   els.diagnostics.hidden = false;
 }
 
@@ -349,7 +395,7 @@ function renderFilterList(category) {
     return;
   }
 
-  const limit = category === "genre" ? Infinity : (state.filterSearch[cfg.searchKey] ? 180 : 80);
+  const limit = category === "genre" ? Infinity : (state.filterSearch[cfg.searchKey] ? 180 : state.optionLimit[category]);
   const visible = counts.slice(0, limit);
   const hidden = counts.length - visible.length;
 
@@ -363,11 +409,22 @@ function renderFilterList(category) {
           <span class="filter-option__count">${count}</span>
         </span>
       </label>`;
-  }).join("") + (hidden > 0 ? `<p class="hint">+${hidden} autres. Recherchez pour réduire la liste.</p>` : "");
+  }).join("") + (hidden > 0 ? `
+    <div class="filter-list__more">
+      <p class="hint">+${hidden} autres. Recherchez pour réduire la liste.</p>
+      <button class="secondary-button inline-action" type="button" data-show-more="${category}">Afficher plus</button>
+    </div>` : "");
 
   container.querySelectorAll("input").forEach(input => {
     input.addEventListener("change", () => {
       setFilterSelection(category, input.value, input.checked);
+    });
+  });
+
+  container.querySelectorAll("[data-show-more]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.optionLimit[category] += 80;
+      renderFilterList(category);
     });
   });
 
@@ -452,7 +509,11 @@ function render() {
 
   renderActiveFilters();
   renderFilterLists();
-  els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `<div class="empty">Aucun film ne correspond aux filtres actuels.</div>`;
+  els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `
+    <div class="empty">
+      <p>Aucun film ne correspond aux filtres actuels.</p>
+      <button class="secondary-button inline-action" type="button" data-action="clear-filters">Effacer les filtres</button>
+    </div>`;
 }
 
 function renderMovieCard(row) {
@@ -467,7 +528,7 @@ function renderMovieCard(row) {
   const year = cell(row, "year");
 
   const meta = [
-    rating ? `<span class="meta-badge meta-badge--rating ${ratingClass(rating)}">IMDb ${escapeHtml(rating)}</span>` : "",
+    rating ? `<span class="meta-badge meta-badge--rating ${ratingClass(rating)}">IMDb ${escapeHtml(rating)} · ${ratingLabel(rating)}</span>` : "",
     `<span class="meta-badge">${escapeHtml(formatRuntime(runtime))}</span>`,
     year ? `<span class="meta-badge">${escapeHtml(year)}</span>` : "",
     country ? `<span class="meta-badge">${escapeHtml(country)}</span>` : ""
@@ -482,7 +543,7 @@ function renderMovieCard(row) {
       <div class="badge-row">${meta}</div>
       <div class="credits">
         ${directors.length ? `<p><strong>Réalisation :</strong> ${highlightList(directors, state.selected.director)}</p>` : ""}
-        ${actors.length ? `<p class="actors-line"><strong>Acteurs :</strong> ${highlightList(actors, state.selected.actor)}</p>` : ""}
+        ${actors.length ? `<p class="actors-line"><strong>Acteurs :</strong> ${highlightList(visibleCredits(actors, state.selected.actor), state.selected.actor)}${hiddenCreditCount(actors, state.selected.actor)}</p>` : ""}
       </div>
       <div class="chips">${genres.map(genre => `<span class="genre-chip ${state.selected.genre.has(genre) ? "genre-chip--selected" : ""}">${escapeHtml(genre)}</span>`).join("")}</div>
     </article>`;
@@ -496,6 +557,26 @@ function ratingClass(value) {
   return "meta-badge--rating-low";
 }
 
+function ratingLabel(value) {
+  const score = parseNumber(value);
+  if (!Number.isFinite(score)) return "Non noté";
+  if (score >= 8) return "Excellent";
+  if (score >= 7) return "Bon";
+  return "À découvrir";
+}
+
+function visibleCredits(values, selected) {
+  const pinned = values.filter(value => selected.has(value));
+  const rest = values.filter(value => !selected.has(value));
+  return [...pinned, ...rest].slice(0, Math.max(4, pinned.length));
+}
+
+function hiddenCreditCount(values, selected) {
+  const visible = visibleCredits(values, selected);
+  const hidden = values.length - visible.length;
+  return hidden > 0 ? ` <span class="credit-more">+${hidden}</span>` : "";
+}
+
 function highlightList(values, selected) {
   return values.map(value => {
     const cls = selected.has(value) ? "credit-token selected-credit" : "credit-token";
@@ -503,18 +584,35 @@ function highlightList(values, selected) {
   }).join(`<span class="credit-separator">, </span>`);
 }
 
-function renderActiveFilters() {
+function activeFilterItems() {
   const items = [];
   if (state.search) items.push({ group: "Recherche", category: "search", value: state.search });
   for (const [category, label] of [["genre", "Genre"], ["actor", "Acteur"], ["director", "Réalisateur"]]) {
     for (const value of state.selected[category]) items.push({ group: label, category, value });
   }
+  return items;
+}
+
+function renderActiveFilters() {
+  const items = activeFilterItems();
 
   els.activeFilters.innerHTML = items.map(item => `
     <span class="active-filter-chip">
       <span>${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>
       <button class="filter-remove" type="button" data-category="${item.category}" data-value="${escapeHtml(item.value)}" aria-label="Retirer le filtre ${escapeHtml(item.group)}">×</button>
     </span>`).join("");
+  renderFilterSelectionSummary(items);
+}
+
+function renderFilterSelectionSummary(items = activeFilterItems()) {
+  if (!items.length) {
+    els.filterSelectionSummary.textContent = "Aucun filtre sélectionné";
+    return;
+  }
+
+  const visible = items.slice(0, 4).map(item => `${item.group}: ${item.value}`);
+  const hidden = items.length - visible.length;
+  els.filterSelectionSummary.textContent = `Sélection : ${visible.join(" · ")}${hidden > 0 ? ` · +${hidden}` : ""}`;
 }
 
 function activeCount() {
@@ -522,7 +620,9 @@ function activeCount() {
 }
 
 function updateCounts() {
-  els.filterCount.textContent = String(activeCount());
+  const count = String(activeCount());
+  els.filterCount.textContent = count;
+  els.desktopFilterCount.textContent = count;
   els.genreSelectedCount.textContent = String(state.selected.genre.size);
   els.actorSelectedCount.textContent = String(state.selected.actor.size);
   els.directorSelectedCount.textContent = String(state.selected.director.size);
@@ -533,7 +633,8 @@ function setActivePanel(category) {
   document.querySelectorAll("[data-filter-category]").forEach(button => {
     const active = button.dataset.filterCategory === category;
     button.classList.toggle("is-active", active);
-    button.setAttribute("aria-pressed", String(active));
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
   });
   document.querySelectorAll("[data-filter-panel]").forEach(panel => {
     panel.hidden = panel.dataset.filterPanel !== category;
@@ -562,27 +663,32 @@ function closeFilters() {
 }
 
 function syncFilterA11y() {
-  const visible = DESKTOP_QUERY.matches || state.filtersOpen;
+  const isDesktop = DESKTOP_QUERY.matches;
+  const visible = isDesktop || state.filtersOpen;
+  const isModal = !isDesktop && state.filtersOpen;
+
   els.filterPanel.setAttribute("aria-hidden", String(!visible));
-  if (DESKTOP_QUERY.matches) {
+  els.filterPanel.toggleAttribute("inert", !visible);
+
+  if (isModal) {
+    els.filterPanel.setAttribute("role", "dialog");
+    els.filterPanel.setAttribute("aria-modal", "true");
+  } else {
+    els.filterPanel.removeAttribute("role");
+    els.filterPanel.removeAttribute("aria-modal");
+  }
+
+  if (isDesktop) {
+    state.filtersOpen = false;
+    els.filterPanel.classList.remove("is-open");
     els.filterBackdrop.hidden = true;
     document.body.classList.remove("filters-open");
   }
 }
 
 function clearFilters() {
-  state.search = "";
-  state.filterSearch.actor = "";
-  state.filterSearch.director = "";
-  state.matchMode = { genre: "any", actor: "any", director: "any" };
-  for (const set of Object.values(state.selected)) set.clear();
-
-  els.searchInput.value = "";
-  els.actorFilterSearch.value = "";
-  els.directorFilterSearch.value = "";
-  els.genreMatchMode.value = "any";
-  els.actorMatchMode.value = "any";
-  els.directorMatchMode.value = "any";
+  resetFilterState();
+  syncFilterControls();
   render();
 }
 
@@ -608,6 +714,31 @@ function setFilterSearchFocus(isFocused) {
   }
 }
 
+function trapFilterFocus(event) {
+  if (event.key !== "Tab" || !state.filtersOpen || DESKTOP_QUERY.matches) return;
+
+  const focusable = [...els.filterPanel.querySelectorAll(FILTER_FOCUSABLE_SELECTOR)]
+    .filter(el => !el.closest("[hidden]") && el.offsetParent !== null);
+  if (!focusable.length) {
+    event.preventDefault();
+    els.filterPanel.focus();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!els.filterPanel.contains(document.activeElement)) {
+    event.preventDefault();
+    first.focus();
+  } else if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
@@ -623,6 +754,12 @@ function bindEvents() {
 
   els.clearFilters.addEventListener("click", clearFilters);
   els.reloadData.addEventListener("click", loadSheet);
+  els.status.addEventListener("click", event => {
+    if (event.target.closest('[data-action="reload"]')) loadSheet();
+  });
+  els.movieGrid.addEventListener("click", event => {
+    if (event.target.closest('[data-action="clear-filters"]')) clearFilters();
+  });
   els.openFilters.addEventListener("click", openFilters);
   els.closeFilters.addEventListener("click", closeFilters);
   els.applyFilters.addEventListener("click", closeFilters);
@@ -635,10 +772,23 @@ function bindEvents() {
 
   document.querySelectorAll("[data-filter-category]").forEach(button => {
     button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory));
+    button.addEventListener("keydown", event => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const tabs = [...document.querySelectorAll("[data-filter-category]")];
+      const current = tabs.indexOf(button);
+      const nextIndex = event.key === "Home" ? 0
+        : event.key === "End" ? tabs.length - 1
+        : event.key === "ArrowLeft" ? (current - 1 + tabs.length) % tabs.length
+        : (current + 1) % tabs.length;
+      event.preventDefault();
+      tabs[nextIndex].focus();
+      setActivePanel(tabs[nextIndex].dataset.filterCategory);
+    });
   });
 
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && state.filtersOpen) closeFilters();
+    trapFilterFocus(event);
   });
 
   if (DESKTOP_QUERY.addEventListener) DESKTOP_QUERY.addEventListener("change", syncFilterA11y);

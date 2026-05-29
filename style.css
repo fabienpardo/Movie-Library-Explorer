@@ -924,3 +924,101 @@ h1 {
     margin-bottom: 12px;
   }
 }
+
+/* UX refinements: sticky controls, inline recovery actions, and compact filter summaries. */
+.toolbar-label {
+  align-self: end;
+  margin: 0 0 -4px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mobile-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+.filter-total-count {
+  margin-left: 8px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.filter-selection-summary {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(139,184,255,0.24);
+  border-radius: var(--radius-md);
+  background: rgba(37, 88, 137, 0.20);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.inline-action {
+  width: auto;
+  min-height: 36px;
+  margin-top: 12px;
+  padding: 7px 14px;
+}
+
+.filter-list__more {
+  flex-basis: 100%;
+}
+
+.filter-list__more .hint {
+  margin-bottom: 8px;
+}
+
+.empty p {
+  margin: 0;
+}
+
+.credit-more {
+  color: var(--faint);
+  font-weight: 760;
+}
+
+@media (min-width: 760px) {
+  .mobile-toolbar {
+    top: 12px;
+    z-index: 5;
+    grid-template-columns: auto minmax(0, 1fr) auto 220px;
+    align-items: center;
+    border-radius: var(--radius-md);
+  }
+
+  .toolbar-label {
+    margin: 0;
+    padding-left: 8px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 559px) {
+  .toolbar-label {
+    font-size: 10px;
+  }
+}
+
+.diagnostics details {
+  margin-top: 10px;
+}
+
+.diagnostics summary {
+  cursor: pointer;
+  font-weight: 760;
+}
+
+.diagnostics pre {
+  margin: 10px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: inherit;
+}
