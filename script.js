@@ -2,6 +2,7 @@ const PUBLISHED_SHEET_ID = "2PACX-1vR0f-YQic-WwbzgTdFQroIy9T1P14usd5ysqySDfuM0Hi
 const GID = "70337195";
 const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${GID}&single=true&output=csv`;
 const DESKTOP_QUERY = window.matchMedia("(min-width: 760px)");
+const FILTER_FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), select:not([disabled])";
 
 // Update these aliases if the Google Sheet column names change.
 const columnAliases = {
@@ -208,6 +209,39 @@ function cell(row, field) {
   return column ? row[column] ?? "" : "";
 }
 
+function resetLoadedData() {
+  state.rows = [];
+  state.labels = [];
+  state.columns = {};
+  state.warnings = [];
+}
+
+function resetFilterState() {
+  state.search = "";
+  state.filterSearch.actor = "";
+  state.filterSearch.director = "";
+  state.matchMode = { genre: "any", actor: "any", director: "any" };
+  for (const set of Object.values(state.selected)) set.clear();
+}
+
+function syncFilterControls() {
+  els.searchInput.value = state.search;
+  els.actorFilterSearch.value = state.filterSearch.actor;
+  els.directorFilterSearch.value = state.filterSearch.director;
+  els.genreMatchMode.value = state.matchMode.genre;
+  els.actorMatchMode.value = state.matchMode.actor;
+  els.directorMatchMode.value = state.matchMode.director;
+}
+
+function resetAfterLoadFailure() {
+  resetLoadedData();
+  resetFilterState();
+  syncFilterControls();
+  renderActiveFilters();
+  updateCounts();
+  els.diagnostics.hidden = true;
+}
+
 async function loadSheet() {
   showLoading();
 
@@ -228,6 +262,7 @@ async function loadSheet() {
     renderDiagnostics();
     render();
   } catch (error) {
+    resetAfterLoadFailure();
     showError(`${error.message}\n\nSource: ${SHEET_CSV_URL}`);
   }
 }
@@ -562,27 +597,32 @@ function closeFilters() {
 }
 
 function syncFilterA11y() {
-  const visible = DESKTOP_QUERY.matches || state.filtersOpen;
+  const isDesktop = DESKTOP_QUERY.matches;
+  const visible = isDesktop || state.filtersOpen;
+  const isModal = !isDesktop && state.filtersOpen;
+
   els.filterPanel.setAttribute("aria-hidden", String(!visible));
-  if (DESKTOP_QUERY.matches) {
+  els.filterPanel.toggleAttribute("inert", !visible);
+
+  if (isModal) {
+    els.filterPanel.setAttribute("role", "dialog");
+    els.filterPanel.setAttribute("aria-modal", "true");
+  } else {
+    els.filterPanel.removeAttribute("role");
+    els.filterPanel.removeAttribute("aria-modal");
+  }
+
+  if (isDesktop) {
+    state.filtersOpen = false;
+    els.filterPanel.classList.remove("is-open");
     els.filterBackdrop.hidden = true;
     document.body.classList.remove("filters-open");
   }
 }
 
 function clearFilters() {
-  state.search = "";
-  state.filterSearch.actor = "";
-  state.filterSearch.director = "";
-  state.matchMode = { genre: "any", actor: "any", director: "any" };
-  for (const set of Object.values(state.selected)) set.clear();
-
-  els.searchInput.value = "";
-  els.actorFilterSearch.value = "";
-  els.directorFilterSearch.value = "";
-  els.genreMatchMode.value = "any";
-  els.actorMatchMode.value = "any";
-  els.directorMatchMode.value = "any";
+  resetFilterState();
+  syncFilterControls();
   render();
 }
 
@@ -605,6 +645,31 @@ function setFilterSearchFocus(isFocused) {
         active.scrollIntoView({ block: "center", behavior: "smooth" });
       }
     }, 80);
+  }
+}
+
+function trapFilterFocus(event) {
+  if (event.key !== "Tab" || !state.filtersOpen || DESKTOP_QUERY.matches) return;
+
+  const focusable = [...els.filterPanel.querySelectorAll(FILTER_FOCUSABLE_SELECTOR)]
+    .filter(el => !el.closest("[hidden]") && el.offsetParent !== null);
+  if (!focusable.length) {
+    event.preventDefault();
+    els.filterPanel.focus();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!els.filterPanel.contains(document.activeElement)) {
+    event.preventDefault();
+    first.focus();
+  } else if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
   }
 }
 
@@ -639,6 +704,7 @@ function bindEvents() {
 
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && state.filtersOpen) closeFilters();
+    trapFilterFocus(event);
   });
 
   if (DESKTOP_QUERY.addEventListener) DESKTOP_QUERY.addEventListener("change", syncFilterA11y);
