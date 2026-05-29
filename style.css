@@ -1114,3 +1114,144 @@ h1 {
     scroll-margin-top: 24px;
   }
 }
+
+/* v5.2 desktop polish: remove mobile bottom-sheet proportions from the permanent sidebar. */
+@media (min-width: 980px) {
+  .app-header__inner {
+    grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+
+  .app-shell {
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .filter-panel {
+    top: var(--space-5);
+    max-height: calc(100dvh - 2 * var(--space-5));
+    padding: var(--space-4);
+    overflow: hidden;
+  }
+
+  .filter-panel__header {
+    display: block;
+    padding: 0 0 var(--space-3);
+    margin: 0 0 var(--space-3);
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .filter-panel__header .eyebrow {
+    margin-bottom: 2px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+  }
+
+  .filter-panel__header h2 {
+    font-size: 30px;
+    line-height: 1;
+    letter-spacing: -0.055em;
+  }
+
+  .filter-panel__body {
+    padding: 0;
+  }
+
+  .filter-jump-nav {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 var(--space-4);
+    padding: 0 0 var(--space-3);
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+    background: linear-gradient(180deg, rgba(19, 25, 40, 0.96), rgba(19, 25, 40, 0.86));
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+  }
+
+  .filter-jump-nav__button {
+    min-height: 38px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .filter-help,
+  .match-mode-card {
+    border-radius: 18px;
+  }
+
+  .filter-help {
+    margin-bottom: var(--space-3);
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .match-mode-card {
+    gap: 8px;
+    margin: 8px 0 12px;
+    padding: 12px;
+  }
+
+  .match-mode-card select {
+    min-height: 40px;
+    padding-block: 8px;
+    font-size: 14px;
+  }
+
+  .hint {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .filter-section {
+    margin-bottom: var(--space-4);
+    padding-top: 0;
+    scroll-margin-top: 70px;
+  }
+
+  .filter-section__heading {
+    padding-top: 0;
+  }
+
+  .filter-section__heading h3 {
+    font-size: 13px;
+  }
+
+  .filter-list {
+    gap: 8px;
+  }
+
+  .filter-list--searchable {
+    max-height: 190px;
+  }
+
+  .filter-option__content {
+    min-height: 38px;
+    padding: 8px 11px;
+    font-size: 13px;
+  }
+
+  .filter-option__count {
+    font-size: 11px;
+  }
+
+  .filter-option input:checked + .filter-option__content::before {
+    width: 17px;
+    height: 17px;
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 1240px) {
+  .app-shell,
+  .app-header__inner {
+    max-width: 1280px;
+  }
+}

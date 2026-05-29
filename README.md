@@ -136,3 +136,9 @@ This patch addresses the code review items:
 - Added UTF-8 BOM stripping for CSV headers to avoid first-column detection failures.
 - Improved runtime parsing for values such as `2 hr 22 min`, `2 hrs`, and `2 hours 22 minutes`.
 - Added a diagnostic warning when the title column is not detected and the app falls back to the first detected column.
+
+## v5.2 desktop polish
+
+- Keeps the mobile filter drawer behavior on iPhone.
+- Makes the desktop filter sidebar more compact and less like a mobile bottom sheet.
+- Reduces desktop filter header, navigation, chip, and match-mode spacing.
