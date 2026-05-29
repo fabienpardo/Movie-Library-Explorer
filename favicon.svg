@@ -1,6 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#111318"/>
-  <path d="M18 14h28a6 6 0 0 1 6 6v24a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z" fill="#242a36" stroke="#8fb4ff" stroke-width="3"/>
-  <path d="M26 24v16l14-8-14-8Z" fill="#8fb4ff"/>
-  <path d="M18 14v36M46 14v36M12 25h12M40 25h12M12 39h12M40 39h12" stroke="#a8b0c2" stroke-width="3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="16" y1="12" x2="112" y2="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#dbe8ff"/>
+      <stop offset="0.38" stop-color="#74a7ff"/>
+      <stop offset="0.72" stop-color="#9c6bff"/>
+      <stop offset="1" stop-color="#071225"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="30" y1="22" x2="96" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity=".85"/>
+      <stop offset=".45" stop-color="#fff" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".08"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+  </defs>
+  <rect x="10" y="10" width="108" height="108" rx="32" fill="url(#bg)"/>
+  <rect x="15" y="15" width="98" height="98" rx="28" fill="url(#shine)" opacity=".55"/>
+  <path d="M38 39h52a10 10 0 0 1 10 10v30a10 10 0 0 1-10 10H38a10 10 0 0 1-10-10V49a10 10 0 0 1 10-10Z" fill="#071225" opacity=".54"/>
+  <path d="m58 54 22 13-22 13V54Z" fill="#fff" opacity=".92"/>
+  <path d="M28 52h72" stroke="#fff" stroke-opacity=".45" stroke-width="5" filter="url(#blur)"/>
 </svg>

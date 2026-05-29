@@ -2,289 +2,94 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f1f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Movies" />
   <title>Movie Library Explorer</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <style>
-    :root {
-      --bg: #111318;
-      --panel: #1a1e27;
-      --panel-2: #242a36;
-      --panel-3: #151923;
-      --text: #f4f6fb;
-      --muted: #a8b0c2;
-      --border: #343b4a;
-      --accent: #8fb4ff;
-      --danger: #ff9b9b;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-
-    header {
-      padding: 28px 24px 18px;
-      border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, #171b24, #111318);
-    }
-
-    header h1 {
-      margin: 0 0 8px;
-      font-size: clamp(24px, 3vw, 38px);
-      letter-spacing: -0.03em;
-    }
-
-    header p {
-      margin: 0;
-      color: var(--muted);
-      max-width: 880px;
-      line-height: 1.5;
-    }
-
-    main {
-      display: grid;
-      grid-template-columns: 340px 1fr;
-      gap: 20px;
-      padding: 20px;
-      max-width: 1500px;
-      margin: 0 auto;
-    }
-
-    aside, section {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-    }
-
-    aside {
-      padding: 16px;
-      align-self: start;
-      position: sticky;
-      top: 16px;
-      max-height: calc(100vh - 32px);
-      overflow: auto;
-    }
-
-    section {
-      padding: 16px;
-      min-width: 0;
-    }
-
-    .control-group { margin-bottom: 18px; }
-
-    label, .label {
-      display: block;
-      font-size: 13px;
-      font-weight: 650;
-      color: var(--muted);
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    input[type="search"], select {
-      width: 100%;
-      border: 1px solid var(--border);
-      background: var(--panel-2);
-      color: var(--text);
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 14px;
-      outline: none;
-    }
-
-    input[type="search"]:focus, select:focus { border-color: var(--accent); }
-
-    .filter-list {
-      display: grid;
-      gap: 8px;
-      max-height: 260px;
-      overflow: auto;
-      padding-right: 4px;
-    }
-
-    .filter-option {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--text);
-      font-size: 14px;
-      text-transform: none;
-      letter-spacing: 0;
-      font-weight: 450;
-      margin: 0;
-      line-height: 1.25;
-    }
-
-    .filter-option small {
-      margin-left: auto;
-      color: var(--muted);
-      font-size: 12px;
-      padding-left: 8px;
-    }
-
-    .buttons {
-      display: flex;
-      gap: 10px;
-    }
-
-    button {
-      border: 1px solid var(--border);
-      background: var(--panel-2);
-      color: var(--text);
-      border-radius: 10px;
-      padding: 9px 12px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-
-    button:hover { border-color: var(--accent); }
-
-    .summary {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 9px;
-      border: 1px solid var(--border);
-      background: var(--panel-2);
-      border-radius: 999px;
-      color: var(--text);
-      font-size: 13px;
-    }
-
-    .pill-muted {
-      color: var(--muted);
-      background: var(--panel-3);
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 14px;
-    }
-
-    .card {
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      min-height: 190px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .card h2 {
-      margin: 0;
-      font-size: 17px;
-      line-height: 1.25;
-      letter-spacing: -0.015em;
-    }
-
-    .original-title {
-      margin-top: -4px;
-      color: var(--muted);
-      font-size: 13px;
-      font-style: italic;
-      line-height: 1.35;
-    }
-
-    .meta {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
-    }
-
-    .credit-line {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
-    .chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: auto;
-    }
-
-    .chip {
-      padding: 4px 7px;
-      background: var(--panel-3);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .error {
-      color: var(--danger);
-      line-height: 1.5;
-      white-space: pre-wrap;
-    }
-
-    .empty {
-      color: var(--muted);
-      text-align: center;
-      padding: 60px 10px;
-      border: 1px dashed var(--border);
-      border-radius: 14px;
-    }
-
-    .hint {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.4;
-      margin-top: 8px;
-    }
-
-    @media (max-width: 900px) {
-      main { grid-template-columns: 1fr; }
-      aside {
-        position: static;
-        max-height: none;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>Movie Library Explorer</h1>
-    <p>Filter your published Google Sheet by genre, actor, and director. Sort by runtime, title, year, IMDb rating, country, or original title.</p>
+  <header class="app-header">
+    <div class="app-header__inner">
+      <div>
+        <p class="eyebrow">Movie library</p>
+        <h1>Explorer</h1>
+      </div>
+      <p class="app-subtitle">Filter by genre, actor, and director. Sort by runtime, IMDb rating, title, year, or country.</p>
+    </div>
   </header>
 
-  <main>
-    <aside>
-      <div class="control-group">
-        <label for="searchInput">Search</label>
-        <input id="searchInput" type="search" placeholder="Title, country, actor, director…" />
+  <main class="app-shell">
+    <aside id="filterPanel" class="filter-panel" aria-label="Movie filters" aria-hidden="true">
+      <div class="filter-panel__handle" aria-hidden="true"></div>
+      <div class="filter-panel__header">
+        <div>
+          <p class="eyebrow">Refine</p>
+          <h2>Filters</h2>
+        </div>
+        <button id="closeFilters" class="icon-button" type="button" aria-label="Close filters">×</button>
       </div>
 
-      <div class="control-group">
-        <label for="sortSelect">Sort</label>
+      <div class="filter-panel__body">
+        <div class="control-group">
+          <label for="matchMode">Match mode</label>
+          <select id="matchMode">
+            <option value="any">Any selected value within each group</option>
+            <option value="all">All selected values within each group</option>
+          </select>
+          <p class="hint">Filter groups combine together. Example: genre + actor + director must all match.</p>
+        </div>
+
+        <div class="button-row">
+          <button id="clearFilters" class="secondary-button" type="button">Clear all</button>
+          <button id="reloadData" class="secondary-button" type="button">Reload data</button>
+        </div>
+
+        <section class="filter-section" aria-labelledby="genreHeading">
+          <div class="filter-section__heading">
+            <h3 id="genreHeading">Genres</h3>
+            <span id="genreSelectedCount" class="count-badge">0</span>
+          </div>
+          <div id="genreList" class="filter-list">Loading…</div>
+        </section>
+
+        <section class="filter-section" aria-labelledby="actorHeading">
+          <div class="filter-section__heading">
+            <h3 id="actorHeading">Actors</h3>
+            <span id="actorSelectedCount" class="count-badge">0</span>
+          </div>
+          <label class="visually-hidden" for="actorFilterSearch">Filter actor list</label>
+          <input id="actorFilterSearch" type="search" placeholder="Search actors…" autocomplete="off" />
+          <div id="actorList" class="filter-list filter-list--searchable">Loading…</div>
+        </section>
+
+        <section class="filter-section" aria-labelledby="directorHeading">
+          <div class="filter-section__heading">
+            <h3 id="directorHeading">Directors</h3>
+            <span id="directorSelectedCount" class="count-badge">0</span>
+          </div>
+          <label class="visually-hidden" for="directorFilterSearch">Filter director list</label>
+          <input id="directorFilterSearch" type="search" placeholder="Search directors…" autocomplete="off" />
+          <div id="directorList" class="filter-list filter-list--searchable">Loading…</div>
+        </section>
+      </div>
+
+      <div class="filter-panel__footer">
+        <button id="applyFilters" class="primary-button" type="button">Show results</button>
+      </div>
+    </aside>
+
+    <div id="filterBackdrop" class="filter-backdrop" hidden></div>
+
+    <section class="content-panel" aria-live="polite">
+      <div class="mobile-toolbar">
+        <label class="visually-hidden" for="searchInput">Search movies</label>
+        <input id="searchInput" type="search" placeholder="Search movies…" autocomplete="off" />
+
+        <label class="visually-hidden" for="sortSelect">Sort movies</label>
         <select id="sortSelect">
           <option value="title-asc">Title A → Z</option>
           <option value="originalTitle-asc">Original title A → Z</option>
@@ -295,44 +100,16 @@
           <option value="year-asc">Year oldest → newest</option>
           <option value="country-asc">Country A → Z</option>
         </select>
+
+        <button id="openFilters" class="primary-button mobile-filter-button" type="button">
+          Filters <span id="filterCount" class="button-badge">0</span>
+        </button>
       </div>
 
-      <div class="control-group">
-        <div class="label">Filter match</div>
-        <select id="matchMode">
-          <option value="any">Any selected value within each filter</option>
-          <option value="all">All selected values within each filter</option>
-        </select>
-        <div class="hint">Different filter groups are combined together. Example: genre + actor + director must all match.</div>
-      </div>
-
-      <div class="control-group buttons">
-        <button id="clearFilters" type="button">Clear filters</button>
-        <button id="reloadData" type="button">Reload data</button>
-      </div>
-
-      <div class="control-group">
-        <div class="label">Genres</div>
-        <div id="genreList" class="filter-list">Loading…</div>
-      </div>
-
-      <div class="control-group">
-        <label for="actorFilterSearch">Actors</label>
-        <input id="actorFilterSearch" type="search" placeholder="Filter actor list…" />
-        <div id="actorList" class="filter-list" style="margin-top: 10px;">Loading…</div>
-      </div>
-
-      <div class="control-group">
-        <label for="directorFilterSearch">Directors</label>
-        <input id="directorFilterSearch" type="search" placeholder="Filter director list…" />
-        <div id="directorList" class="filter-list" style="margin-top: 10px;">Loading…</div>
-      </div>
-    </aside>
-
-    <section>
-      <div id="status" class="summary">Loading movie library…</div>
-      <div id="activeFilters" class="pill-row"></div>
-      <div id="movieGrid" class="grid"></div>
+      <div id="status" class="summary-card">Loading movie library…</div>
+      <div id="diagnostics" class="diagnostics" hidden></div>
+      <div id="activeFilters" class="active-filters"></div>
+      <div id="movieGrid" class="movie-grid"></div>
     </section>
   </main>
 

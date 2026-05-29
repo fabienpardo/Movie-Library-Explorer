@@ -7,6 +7,7 @@ const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEE
 
 const state = {
   rows: [],
+  labels: [],
   columns: {},
   selectedGenres: new Set(),
   selectedActors: new Set(),
@@ -15,37 +16,41 @@ const state = {
   actorListSearch: "",
   directorListSearch: "",
   sort: "title-asc",
-  matchMode: "any"
+  matchMode: "any",
+  filtersOpen: false
 };
 
-const titleAliases = ["title", "movie", "movie title", "name"];
-const originalTitleAliases = ["original title", "originaltitle", "original name", "original movie title"];
-const genreAliases = ["genre", "genres"];
-const runtimeAliases = [
-  "runtime",
-  "runtime min",
-  "runtime mins",
-  "runtime minutes",
-  "duration",
-  "duration min",
-  "duration mins",
-  "duration minutes",
-  "running time"
-];
-const yearAliases = ["year", "release year", "movie year"];
-const imdbRatingAliases = ["imdb rating", "imdb", "imdb score", "imdb rate", "imdb user rating"];
-const countryAliases = [
-  "country",
-  "countries",
-  "production country",
-  "production countries",
-  "main country",
-  "origin country",
-  "country of origin",
-  "nationality"
-];
-const actorAliases = ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"];
-const directorAliases = ["director", "directors", "directed by"];
+// Update these aliases if the Google Sheet column names change.
+const columnAliases = {
+  title: ["title", "movie", "movie title", "name"],
+  originalTitle: ["original title", "originaltitle", "original name", "original movie title"],
+  genres: ["genre", "genres"],
+  runtime: [
+    "runtime",
+    "runtime min",
+    "runtime mins",
+    "runtime minutes",
+    "duration",
+    "duration min",
+    "duration mins",
+    "duration minutes",
+    "running time"
+  ],
+  year: ["year", "release year", "movie year"],
+  imdbRating: ["imdb rating", "imdb", "imdb score", "imdb rate", "imdb user rating"],
+  country: [
+    "country",
+    "countries",
+    "production country",
+    "production countries",
+    "main country",
+    "origin country",
+    "country of origin",
+    "nationality"
+  ],
+  actors: ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"],
+  directors: ["director", "directors", "directed by"]
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -73,15 +78,15 @@ function detectColumns(labels) {
   };
 
   return {
-    title: pick(titleAliases, { exclude: ["original title"] }) || labels[0],
-    originalTitle: pick(originalTitleAliases),
-    genres: pick(genreAliases),
-    runtime: pick(runtimeAliases),
-    year: pick(yearAliases),
-    imdbRating: pick(imdbRatingAliases),
-    country: pick(countryAliases),
-    actors: pick(actorAliases),
-    directors: pick(directorAliases)
+    title: pick(columnAliases.title, { exclude: ["original title"] }) || labels[0],
+    originalTitle: pick(columnAliases.originalTitle),
+    genres: pick(columnAliases.genres),
+    runtime: pick(columnAliases.runtime),
+    year: pick(columnAliases.year),
+    imdbRating: pick(columnAliases.imdbRating),
+    country: pick(columnAliases.country),
+    actors: pick(columnAliases.actors),
+    directors: pick(columnAliases.directors)
   };
 }
 
@@ -208,6 +213,8 @@ function parseCsvTable(csvText) {
 
 async function loadSheet() {
   $("status").textContent = "Loading movie library…";
+  $("diagnostics").hidden = true;
+  $("diagnostics").textContent = "";
   $("movieGrid").innerHTML = "";
   setFilterListLoading();
 
@@ -221,19 +228,15 @@ async function loadSheet() {
     }
 
     const { labels, rows } = parseCsvTable(csvText);
+    state.labels = labels;
     state.rows = rows.filter(row => Object.values(row).some(value => String(value || "").trim() !== ""));
     state.columns = detectColumns(labels);
 
-    if (!state.columns.genres) throw new Error('Could not detect a genre column. Rename your genre column to "Genres" or update genreAliases in script.js.');
-    if (!state.columns.runtime) console.warn("Could not detect a runtime column. Runtime sorting will put unknown values last.");
-    if (!state.columns.imdbRating) console.warn("Could not detect an IMDb rating column. IMDb sorting will put unknown values last.");
-    if (!state.columns.actors) console.warn("Could not detect an actors column. Actor filter will be empty.");
-    if (!state.columns.directors) console.warn("Could not detect a directors column. Director filter will be empty.");
-
+    renderDiagnostics(labels);
     renderFilterLists();
     render();
   } catch (error) {
-    showError(`${error.message}\n\nSource used: ${SHEET_CSV_URL}\n\nIf this is a CORS or network error, run the app through a local server first. If it still fails, the most stable fix is to share the original Google Sheet as 'Anyone with the link can view' and use its /d/<real-spreadsheet-id>/gviz/tq endpoint.`);
+    showError(`${error.message}\n\nSource used: ${SHEET_CSV_URL}\n\nIf this is a CORS or network error, test the same GitHub Pages URL in another browser. If it still fails, the stable fix is to share the original Google Sheet as 'Anyone with the link can view' and use its /d/<real-spreadsheet-id>/gviz/tq endpoint.`);
   }
 }
 
@@ -251,6 +254,24 @@ function showError(message) {
   $("movieGrid").innerHTML = "";
 }
 
+function renderDiagnostics(labels) {
+  const importantFields = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle"];
+  const missing = importantFields.filter(field => !state.columns[field]);
+
+  if (!missing.length) {
+    $("diagnostics").hidden = true;
+    return;
+  }
+
+  $("diagnostics").hidden = false;
+  $("diagnostics").textContent = [
+    "Column detection warning.",
+    `Missing expected fields: ${missing.join(", ")}`,
+    `Detected columns: ${labels.join(", ")}`,
+    "To fix this, update the columnAliases object near the top of script.js."
+  ].join("\n");
+}
+
 function getValueCounts(columnName, parser) {
   if (!columnName) return [];
   const counts = new Map();
@@ -258,6 +279,7 @@ function getValueCounts(columnName, parser) {
     const values = parser(getValue(row, columnName));
     for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
   }
+
   return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
@@ -267,12 +289,21 @@ function filterCountsBySearch(counts, searchValue) {
   return counts.filter(([value]) => normalizeKey(value).includes(search));
 }
 
+function prioritizeSelected(counts, selectedSet) {
+  return [...counts].sort((a, b) => {
+    const aSelected = selectedSet.has(a[0]);
+    const bSelected = selectedSet.has(b[0]);
+    if (aSelected !== bSelected) return aSelected ? -1 : 1;
+    return a[0].localeCompare(b[0]);
+  });
+}
+
 function renderFilterLists() {
   renderCheckboxFilter({
     elementId: "genreList",
     counts: getValueCounts(state.columns.genres, parseDelimited),
     selectedSet: state.selectedGenres,
-    emptyLabel: "No genres loaded",
+    emptyLabel: state.columns.genres ? "No genres loaded" : "No genres column detected",
     onChange: render
   });
 
@@ -281,7 +312,9 @@ function renderFilterLists() {
     counts: filterCountsBySearch(getValueCounts(state.columns.actors, parseCredits), state.actorListSearch),
     selectedSet: state.selectedActors,
     emptyLabel: state.columns.actors ? "No actors match the list search" : "No actors column detected",
-    onChange: render
+    onChange: render,
+    maxItems: state.actorListSearch ? 180 : 80,
+    limitHint: "Showing the first actors alphabetically. Search to narrow the list."
   });
 
   renderCheckboxFilter({
@@ -289,30 +322,41 @@ function renderFilterLists() {
     counts: filterCountsBySearch(getValueCounts(state.columns.directors, parseCredits), state.directorListSearch),
     selectedSet: state.selectedDirectors,
     emptyLabel: state.columns.directors ? "No directors match the list search" : "No directors column detected",
-    onChange: render
+    onChange: render,
+    maxItems: state.directorListSearch ? 180 : 100,
+    limitHint: "Showing the first directors alphabetically. Search to narrow the list."
   });
+
+  updateFilterCounts();
 }
 
-function renderCheckboxFilter({ elementId, counts, selectedSet, emptyLabel, onChange }) {
+function renderCheckboxFilter({ elementId, counts, selectedSet, emptyLabel, onChange, maxItems = Infinity, limitHint = "" }) {
   const container = $(elementId);
   if (!counts.length) {
     container.textContent = emptyLabel;
     return;
   }
 
-  container.innerHTML = counts.map(([value, count]) => `
+  const ordered = prioritizeSelected(counts, selectedSet);
+  const visible = ordered.slice(0, maxItems);
+  const hiddenCount = Math.max(0, ordered.length - visible.length);
+
+  container.innerHTML = visible.map(([value, count]) => `
     <label class="filter-option">
       <input type="checkbox" value="${escapeHtml(value)}" ${selectedSet.has(value) ? "checked" : ""} />
-      <span>${escapeHtml(value)}</span>
-      <small>${count}</small>
+      <span class="filter-option__content">
+        <span class="filter-option__label">${escapeHtml(value)}</span>
+        <span class="filter-option__count">${count}</span>
+      </span>
     </label>
-  `).join("");
+  `).join("") + (hiddenCount ? `<p class="hint">+${hiddenCount} more. ${escapeHtml(limitHint)}</p>` : "");
 
   container.querySelectorAll("input[type='checkbox']").forEach(input => {
     input.addEventListener("change", (event) => {
       const value = event.target.value;
       if (event.target.checked) selectedSet.add(value);
       else selectedSet.delete(value);
+      updateFilterCounts();
       onChange();
     });
   });
@@ -402,65 +446,147 @@ function render() {
   }, 0);
 
   $("status").innerHTML = `
-    <span>${filtered.length} / ${state.rows.length} movies</span>
-    <span>${formatRuntime(totalRuntime)} total runtime</span>
+    <span><strong>${filtered.length}</strong> / ${state.rows.length} movies</span>
+    <span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> total runtime</span>
   `;
 
   renderActiveFilters();
+  updateFilterCounts();
 
   if (filtered.length === 0) {
     $("movieGrid").innerHTML = `<div class="empty">No movies match the current filters.</div>`;
     return;
   }
 
-  $("movieGrid").innerHTML = filtered.map(row => {
-    const title = getDisplayTitle(row);
-    const originalTitle = getDisplayOriginalTitle(row);
-    const year = getValue(row, state.columns.year);
-    const imdbRating = getValue(row, state.columns.imdbRating);
-    const runtime = parseRuntime(getValue(row, state.columns.runtime));
-    const country = getMainCountry(getValue(row, state.columns.country));
-    const genres = parseDelimited(getValue(row, state.columns.genres));
-    const actors = parseCredits(getValue(row, state.columns.actors));
-    const directors = parseCredits(getValue(row, state.columns.directors));
+  $("movieGrid").innerHTML = filtered.map(row => renderMovieCard(row)).join("");
+}
 
-    const metaItems = [
-      year ? `Year: ${escapeHtml(year)}` : null,
-      country ? `Country: ${escapeHtml(country)}` : null,
-      `Runtime: ${escapeHtml(formatRuntime(runtime))}`,
-      imdbRating ? `IMDb rating: ${escapeHtml(imdbRating)}` : null
-    ].filter(Boolean);
+function renderMovieCard(row) {
+  const title = getDisplayTitle(row);
+  const originalTitle = getDisplayOriginalTitle(row);
+  const year = getValue(row, state.columns.year);
+  const imdbRating = getValue(row, state.columns.imdbRating);
+  const runtime = parseRuntime(getValue(row, state.columns.runtime));
+  const country = getMainCountry(getValue(row, state.columns.country));
+  const genres = parseDelimited(getValue(row, state.columns.genres));
+  const actors = parseCredits(getValue(row, state.columns.actors));
+  const directors = parseCredits(getValue(row, state.columns.directors));
 
-    return `
-      <article class="card">
+  const badges = [
+    imdbRating ? `<span class="meta-badge meta-badge--rating">IMDb ${escapeHtml(imdbRating)}</span>` : null,
+    `<span class="meta-badge">${escapeHtml(formatRuntime(runtime))}</span>`,
+    year ? `<span class="meta-badge">${escapeHtml(year)}</span>` : null,
+    country ? `<span class="meta-badge">${escapeHtml(country)}</span>` : null
+  ].filter(Boolean).join("");
+
+  return `
+    <article class="movie-card">
+      <div class="movie-card__header">
         <h2>${escapeHtml(title)}</h2>
-        ${originalTitle ? `<div class="original-title">Original title: ${escapeHtml(originalTitle)}</div>` : ""}
-        <div class="meta">${metaItems.join("<br>")}</div>
-        ${directors.length ? `<div class="credit-line"><strong>Director:</strong> ${escapeHtml(directors.slice(0, 3).join(", "))}${directors.length > 3 ? "…" : ""}</div>` : ""}
-        ${actors.length ? `<div class="credit-line"><strong>Actors:</strong> ${escapeHtml(actors.slice(0, 4).join(", "))}${actors.length > 4 ? "…" : ""}</div>` : ""}
-        <div class="chips">
-          ${genres.map(genre => `<span class="chip">${escapeHtml(genre)}</span>`).join("")}
-        </div>
-      </article>
-    `;
-  }).join("");
+        ${originalTitle ? `<div class="original-title">${escapeHtml(originalTitle)}</div>` : ""}
+      </div>
+
+      <div class="badge-row">${badges}</div>
+
+      <div class="credits">
+        ${directors.length ? `<div><strong>Director:</strong> ${escapeHtml(directors.slice(0, 3).join(", "))}${directors.length > 3 ? "…" : ""}</div>` : ""}
+        ${renderActors(actors)}
+      </div>
+
+      <div class="chips">
+        ${genres.map(genre => `<span class="genre-chip">${escapeHtml(genre)}</span>`).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderActors(actors) {
+  if (!actors.length) return "";
+  const visible = actors.slice(0, 4).join(", ");
+  if (actors.length <= 4) return `<div><strong>Actors:</strong> ${escapeHtml(visible)}</div>`;
+
+  return `
+    <details class="actors-details">
+      <summary><strong>Actors:</strong>&nbsp;${escapeHtml(visible)}…</summary>
+      <div class="actors-details__body">${escapeHtml(actors.slice(4).join(", "))}</div>
+    </details>
+  `;
 }
 
 function renderActiveFilters() {
-  const pills = [
-    ...[...state.selectedGenres].map(value => ({ group: "Genre", value })),
-    ...[...state.selectedActors].map(value => ({ group: "Actor", value })),
-    ...[...state.selectedDirectors].map(value => ({ group: "Director", value }))
+  const items = [
+    ...[...state.selectedGenres].map(value => ({ group: "Genre", type: "genre", value })),
+    ...[...state.selectedActors].map(value => ({ group: "Actor", type: "actor", value })),
+    ...[...state.selectedDirectors].map(value => ({ group: "Director", type: "director", value }))
   ];
 
-  if (!pills.length && !state.search) {
+  if (state.search) items.unshift({ group: "Search", type: "search", value: state.search });
+
+  if (!items.length) {
     $("activeFilters").innerHTML = "";
     return;
   }
 
-  const searchPill = state.search ? `<span class="pill pill-muted">Search: ${escapeHtml(state.search)}</span>` : "";
-  const filterPills = pills.map(item => `<span class="pill">${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>`).join("");
-  $("activeFilters").innerHTML = searchPill + filterPills;
+  $("activeFilters").innerHTML = items.map(item => `
+    <span class="active-filter-chip" title="${escapeHtml(item.group)}: ${escapeHtml(item.value)}">
+      <span>${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>
+      <button class="filter-remove" type="button" aria-label="Remove ${escapeHtml(item.group)} filter" data-filter-type="${escapeHtml(item.type)}" data-filter-value="${escapeHtml(item.value)}">×</button>
+    </span>
+  `).join("");
+}
+
+function activeFilterCount() {
+  return state.selectedGenres.size + state.selectedActors.size + state.selectedDirectors.size + (state.search ? 1 : 0);
+}
+
+function updateFilterCounts() {
+  const count = activeFilterCount();
+  $("filterCount").textContent = String(count);
+  $("genreSelectedCount").textContent = String(state.selectedGenres.size);
+  $("actorSelectedCount").textContent = String(state.selectedActors.size);
+  $("directorSelectedCount").textContent = String(state.selectedDirectors.size);
+}
+
+function openFilters() {
+  state.filtersOpen = true;
+  $("filterPanel").classList.add("is-open");
+  $("filterPanel").setAttribute("aria-hidden", "false");
+  $("filterBackdrop").hidden = false;
+  document.body.classList.add("filters-open");
+}
+
+function closeFilters() {
+  state.filtersOpen = false;
+  $("filterPanel").classList.remove("is-open");
+  $("filterPanel").setAttribute("aria-hidden", "true");
+  $("filterBackdrop").hidden = true;
+  document.body.classList.remove("filters-open");
+}
+
+function clearAllFilters() {
+  state.selectedGenres.clear();
+  state.selectedActors.clear();
+  state.selectedDirectors.clear();
+  state.search = "";
+  state.actorListSearch = "";
+  state.directorListSearch = "";
+  $("searchInput").value = "";
+  $("actorFilterSearch").value = "";
+  $("directorFilterSearch").value = "";
+  renderFilterLists();
+  render();
+}
+
+function removeFilter(type, value) {
+  if (type === "genre") state.selectedGenres.delete(value);
+  if (type === "actor") state.selectedActors.delete(value);
+  if (type === "director") state.selectedDirectors.delete(value);
+  if (type === "search") {
+    state.search = "";
+    $("searchInput").value = "";
+  }
+  renderFilterLists();
+  render();
 }
 
 function escapeHtml(value) {
@@ -497,20 +623,21 @@ $("directorFilterSearch").addEventListener("input", event => {
   renderFilterLists();
 });
 
-$("clearFilters").addEventListener("click", () => {
-  state.selectedGenres.clear();
-  state.selectedActors.clear();
-  state.selectedDirectors.clear();
-  state.search = "";
-  state.actorListSearch = "";
-  state.directorListSearch = "";
-  $("searchInput").value = "";
-  $("actorFilterSearch").value = "";
-  $("directorFilterSearch").value = "";
-  renderFilterLists();
-  render();
+$("clearFilters").addEventListener("click", clearAllFilters);
+$("reloadData").addEventListener("click", loadSheet);
+$("openFilters").addEventListener("click", openFilters);
+$("closeFilters").addEventListener("click", closeFilters);
+$("applyFilters").addEventListener("click", closeFilters);
+$("filterBackdrop").addEventListener("click", closeFilters);
+
+$("activeFilters").addEventListener("click", event => {
+  const button = event.target.closest("button[data-filter-type]");
+  if (!button) return;
+  removeFilter(button.dataset.filterType, button.dataset.filterValue);
 });
 
-$("reloadData").addEventListener("click", loadSheet);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && state.filtersOpen) closeFilters();
+});
 
 loadSheet();
