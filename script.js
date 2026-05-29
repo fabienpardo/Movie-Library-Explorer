@@ -565,7 +565,7 @@ function updateFilterCounts() {
   $("directorSelectedCount").textContent = String(state.selectedDirectors.size);
 }
 
-const desktopFiltersQuery = window.matchMedia("(min-width: 980px)");
+const desktopFiltersQuery = window.matchMedia("(min-width: 760px)");
 let lastFocusedElement = null;
 
 function syncFilterPanelAccessibility() {

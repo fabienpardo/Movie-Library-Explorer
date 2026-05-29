@@ -142,3 +142,11 @@ This patch addresses the code review items:
 - Keeps the mobile filter drawer behavior on iPhone.
 - Makes the desktop filter sidebar more compact and less like a mobile bottom sheet.
 - Reduces desktop filter header, navigation, chip, and match-mode spacing.
+
+
+## v5.3 layout patch
+
+- Separates the mobile filter drawer from the tablet/desktop sidebar at a lower breakpoint.
+- Keeps the iPhone bottom-sheet behavior below 760px.
+- Uses a permanent compact sidebar from 760px upward to avoid the enlarged mobile drawer look on desktop-sized windows.
+- Contains the mobile close button inside the header so it no longer overlaps filter navigation.
