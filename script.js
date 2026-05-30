@@ -2,9 +2,10 @@ const PUBLISHED_SHEET_ID = "2PACX-1vR0f-YQic-WwbzgTdFQroIy9T1P14usd5ysqySDfuM0Hi
 const GID = "70337195";
 const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${GID}&single=true&output=csv`;
 const DESKTOP_QUERY = window.matchMedia("(min-width: 760px)");
-const FILTER_FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), select:not([disabled])";
+const SUPPORTS_INERT = "inert" in HTMLElement.prototype;
+const FOCUSABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])";
+const PANEL_FOCUSABLE = "a[href],button,input,select,textarea,[tabindex]";
 
-// Update these aliases if the Google Sheet column names change.
 const columnAliases = {
   title: ["title", "movie", "movie title", "name"],
   originalTitle: ["original title", "originaltitle", "original name", "original movie title"],
@@ -16,6 +17,13 @@ const columnAliases = {
   actors: ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"],
   directors: ["director", "directors", "directed by"]
 };
+
+const categories = {
+  genre: { label: "Genre", column: "genres", listId: "genreList", countId: "genreSelectedCount", empty: "Aucun genre disponible pour les filtres actuels" },
+  actor: { label: "Acteur", column: "actors", listId: "actorList", countId: "actorSelectedCount", searchId: "actorFilterSearch", empty: "Aucun acteur disponible pour les filtres actuels" },
+  director: { label: "Réalisateur", column: "directors", listId: "directorList", countId: "directorSelectedCount", searchId: "directorFilterSearch", empty: "Aucun réalisateur disponible pour les filtres actuels" }
+};
+const categoryKeys = Object.keys(categories);
 
 const els = {};
 const state = {
@@ -33,78 +41,20 @@ const state = {
   lastFocus: null
 };
 
-const fieldConfig = {
-  genre: {
-    column: "genres",
-    listId: "genreList",
-    countId: "genreSelectedCount",
-    parser: parseList,
-    empty: "Aucun genre disponible pour les filtres actuels"
-  },
-  actor: {
-    column: "actors",
-    listId: "actorList",
-    countId: "actorSelectedCount",
-    parser: parseList,
-    searchKey: "actor",
-    empty: "Aucun acteur disponible pour les filtres actuels"
-  },
-  director: {
-    column: "directors",
-    listId: "directorList",
-    countId: "directorSelectedCount",
-    parser: parseList,
-    searchKey: "director",
-    empty: "Aucun réalisateur disponible pour les filtres actuels"
-  }
-};
-
-function categoryLabel(category) {
-  return { genre: "Genre", actor: "Acteur", director: "Réalisateur" }[category] || category;
-}
-
-function cacheEls() {
-  [
-    "status", "diagnostics", "movieGrid", "activeFilters", "filterPanel", "filterBackdrop",
-    "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
-    "searchInput", "sortSelect", "genreMatchMode", "actorMatchMode", "directorMatchMode",
-    "actorFilterSearch", "directorFilterSearch", "genreList", "actorList", "directorList",
-    "genreSelectedCount", "actorSelectedCount", "directorSelectedCount"
-  ].forEach(id => { els[id] = document.getElementById(id); });
-}
-
-function normalize(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
+function byId(id) { return document.getElementById(id); }
 function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
 }
-
-function parseList(value) {
-  return String(value || "").split(/[,;|]/).map(item => item.trim()).filter(Boolean);
+function normalize(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
-
-function mainCountry(value) {
-  return String(value || "").split(/[,;|/]/).map(item => item.trim()).filter(Boolean)[0] || "";
-}
-
+function parseList(value) { return String(value || "").split(/[,;|]/).map(item => item.trim()).filter(Boolean); }
+function mainCountry(value) { return String(value || "").split(/[,;|/]/).map(item => item.trim()).filter(Boolean)[0] || ""; }
 function parseNumber(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const match = String(value || "").replace(",", ".").match(/-?\d+(\.\d+)?/);
   return match ? Number(match[0]) : Number.NaN;
 }
-
 function parseRuntime(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const raw = String(value || "").toLowerCase().trim();
@@ -119,14 +69,25 @@ function parseRuntime(value) {
   const min = raw.match(/(\d+(?:\.\d+)?)\s*(min|mins|minutes|m)?/i);
   return min ? Number(min[1]) : Number.NaN;
 }
-
 function formatRuntime(minutes) {
   if (!Number.isFinite(minutes)) return "Durée inconnue";
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
-  if (h && m) return `${h} h ${m}`;
-  if (h) return `${h} h`;
-  return `${m} min`;
+  return h && m ? `${h} h ${m}` : h ? `${h} h` : `${m} min`;
+}
+
+function cacheEls() {
+  [
+    "status", "diagnostics", "movieGrid", "activeFilters", "filterPanel", "filterBackdrop",
+    "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
+    "searchInput", "sortSelect", "genreMatchMode", "actorMatchMode", "directorMatchMode"
+  ].forEach(id => { els[id] = byId(id); });
+
+  for (const cfg of Object.values(categories)) {
+    els[cfg.listId] = byId(cfg.listId);
+    els[cfg.countId] = byId(cfg.countId);
+    if (cfg.searchId) els[cfg.searchId] = byId(cfg.searchId);
+  }
 }
 
 function parseCsv(text) {
@@ -140,19 +101,14 @@ function parseCsv(text) {
     const next = text[i + 1];
 
     if (char === '"') {
-      if (quoted && next === '"') {
-        field += '"';
-        i += 1;
-      } else {
-        quoted = !quoted;
-      }
+      if (quoted && next === '"') { field += '"'; i += 1; }
+      else quoted = !quoted;
     } else if (char === "," && !quoted) {
       row.push(field);
       field = "";
     } else if ((char === "\n" || char === "\r") && !quoted) {
       if (char === "\r" && next === "\n") i += 1;
-      row.push(field);
-      rows.push(row);
+      rows.push([...row, field]);
       row = [];
       field = "";
     } else {
@@ -160,8 +116,7 @@ function parseCsv(text) {
     }
   }
 
-  row.push(field);
-  rows.push(row);
+  rows.push([...row, field]);
   return rows.filter(items => items.some(item => String(item || "").trim()));
 }
 
@@ -186,8 +141,6 @@ function detectColumns(labels) {
   };
 
   const title = pick(columnAliases.title, ["original title"]);
-  const warnings = title ? [] : [`La colonne de titre n’a pas été détectée. Utilisation de la première colonne : "${labels[0]}".`];
-
   return {
     columns: {
       title: title || labels[0],
@@ -200,7 +153,7 @@ function detectColumns(labels) {
       actors: pick(columnAliases.actors),
       directors: pick(columnAliases.directors)
     },
-    warnings
+    warnings: title ? [] : [`La colonne de titre n’a pas été détectée. Utilisation de la première colonne : "${labels[0]}".`]
   };
 }
 
@@ -208,37 +161,41 @@ function cell(row, field) {
   const column = state.columns[field];
   return column ? row[column] ?? "" : "";
 }
-
-function resetLoadedData() {
-  state.rows = [];
-  state.labels = [];
-  state.columns = {};
-  state.warnings = [];
+function listFor(row, category) { return parseList(cell(row, categories[category].column)); }
+function displayTitle(row) { return cell(row, "title") || cell(row, "originalTitle") || "Sans titre"; }
+function displayOriginalTitle(row) {
+  const original = cell(row, "originalTitle");
+  const title = cell(row, "title");
+  return original && original !== title ? original : "";
 }
 
-function resetFilterState() {
-  state.search = "";
-  state.filterSearch.actor = "";
-  state.filterSearch.director = "";
-  state.matchMode = { genre: "any", actor: "any", director: "any" };
-  for (const set of Object.values(state.selected)) set.clear();
+function resetData() {
+  Object.assign(state, { rows: [], labels: [], columns: {}, warnings: [] });
 }
-
-function syncFilterControls() {
+function resetFilters() {
+  Object.assign(state, {
+    search: "",
+    filterSearch: { actor: "", director: "" },
+    matchMode: { genre: "any", actor: "any", director: "any" },
+    activePanel: "genre"
+  });
+  for (const selected of Object.values(state.selected)) selected.clear();
+}
+function syncControls() {
   els.searchInput.value = state.search;
-  els.actorFilterSearch.value = state.filterSearch.actor;
-  els.directorFilterSearch.value = state.filterSearch.director;
-  els.genreMatchMode.value = state.matchMode.genre;
-  els.actorMatchMode.value = state.matchMode.actor;
-  els.directorMatchMode.value = state.matchMode.director;
+  for (const category of categoryKeys) {
+    byId(`${category}MatchMode`).value = state.matchMode[category];
+    const searchId = categories[category].searchId;
+    if (searchId) els[searchId].value = state.filterSearch[category] || "";
+  }
 }
-
 function resetAfterLoadFailure() {
-  resetLoadedData();
-  resetFilterState();
-  syncFilterControls();
+  resetData();
+  resetFilters();
+  syncControls();
+  setActivePanel(state.activePanel);
   renderActiveFilters();
-  updateCounts();
+  renderFilterLists();
   els.diagnostics.hidden = true;
 }
 
@@ -254,10 +211,12 @@ async function loadSheet() {
 
     const { labels, rows } = csvToTable(text);
     const detected = detectColumns(labels);
-    state.labels = labels;
-    state.rows = rows.filter(row => Object.values(row).some(value => String(value || "").trim()));
-    state.columns = detected.columns;
-    state.warnings = detected.warnings;
+    Object.assign(state, {
+      labels,
+      rows: rows.filter(row => Object.values(row).some(value => String(value || "").trim())),
+      columns: detected.columns,
+      warnings: detected.warnings
+    });
 
     renderDiagnostics();
     render();
@@ -271,189 +230,125 @@ function showLoading() {
   els.status.textContent = "Chargement de la bibliothèque…";
   els.diagnostics.hidden = true;
   els.movieGrid.innerHTML = "";
-  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "Chargement…"; });
+  categoryKeys.forEach(category => { els[categories[category].listId].textContent = "Chargement…"; });
 }
-
 function showError(message) {
   els.status.innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
   els.movieGrid.innerHTML = "";
-  [els.genreList, els.actorList, els.directorList].forEach(el => { el.textContent = "Aucune donnée chargée"; });
+  categoryKeys.forEach(category => { els[categories[category].listId].textContent = "Aucune donnée chargée"; });
 }
-
 function renderDiagnostics() {
-  const expected = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle"];
-  const missing = expected.filter(field => !state.columns[field]);
-  const lines = [];
+  const missing = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle"].filter(field => !state.columns[field]);
+  const lines = [
+    ...(missing.length ? [`Champs attendus manquants : ${missing.join(", ")}`] : []),
+    ...state.warnings
+  ];
 
-  if (missing.length) lines.push(`Champs attendus manquants : ${missing.join(", ")}`);
-  lines.push(...state.warnings);
-
-  if (!lines.length) {
-    els.diagnostics.hidden = true;
-    return;
-  }
-
-  lines.unshift("Avertissement de détection des colonnes.");
-  lines.push(`Colonnes détectées : ${state.labels.join(", ")}`);
-  lines.push("Mettez à jour columnAliases en haut de script.js si nécessaire.");
-  els.diagnostics.textContent = lines.join("\n");
-  els.diagnostics.hidden = false;
-}
-
-function rowValues(row) {
-  return {
-    genre: parseList(cell(row, "genres")),
-    actor: parseList(cell(row, "actors")),
-    director: parseList(cell(row, "directors"))
-  };
+  els.diagnostics.hidden = !lines.length;
+  els.diagnostics.textContent = lines.length
+    ? ["Avertissement de détection des colonnes.", ...lines, `Colonnes détectées : ${state.labels.join(", ")}`, "Mettez à jour columnAliases en haut de script.js si nécessaire."].join("\n")
+    : "";
 }
 
 function matchesList(values, selected, mode) {
-  const items = [...selected];
-  if (!items.length) return true;
-  return mode === "all" ? items.every(item => values.includes(item)) : items.some(item => values.includes(item));
+  const wanted = [...selected];
+  if (!wanted.length) return true;
+  return mode === "all" ? wanted.every(value => values.includes(value)) : wanted.some(value => values.includes(value));
 }
-
-function matchesSearch(row) {
-  return !state.search || normalize(Object.values(row).join(" ")).includes(normalize(state.search));
-}
-
+function matchesSearch(row) { return !state.search || normalize(Object.values(row).join(" ")).includes(normalize(state.search)); }
 function matchesFilters(row, skipCategory = null) {
-  const values = rowValues(row);
-  return matchesSearch(row)
-    && (skipCategory === "genre" || matchesList(values.genre, state.selected.genre, state.matchMode.genre))
-    && (skipCategory === "actor" || matchesList(values.actor, state.selected.actor, state.matchMode.actor))
-    && (skipCategory === "director" || matchesList(values.director, state.selected.director, state.matchMode.director));
+  return matchesSearch(row) && categoryKeys.every(category => (
+    category === skipCategory || matchesList(listFor(row, category), state.selected[category], state.matchMode[category])
+  ));
 }
+function filteredRows() { return state.rows.filter(row => matchesFilters(row)); }
 
-function filteredRows() {
-  return state.rows.filter(row => matchesFilters(row));
-}
+function optionCounts(category) {
+  const cfg = categories[category];
+  if (!state.columns[cfg.column]) return [];
 
-function optionRows(category) {
-  const skipSameCategory = state.matchMode[category] === "any" ? category : null;
-  return state.rows.filter(row => matchesFilters(row, skipSameCategory));
-}
-
-function valueCounts(rows, category) {
-  const { column, parser } = fieldConfig[category];
-  const columnName = state.columns[column];
-  if (!columnName) return [];
-
+  const skip = state.matchMode[category] === "any" ? category : null;
   const counts = new Map();
-  for (const row of rows) {
-    for (const value of parser(row[columnName])) counts.set(value, (counts.get(value) || 0) + 1);
+  for (const row of state.rows.filter(item => matchesFilters(item, skip))) {
+    for (const value of listFor(row, category)) counts.set(value, (counts.get(value) || 0) + 1);
   }
+  for (const value of state.selected[category]) if (!counts.has(value)) counts.set(value, 0);
 
-  for (const selected of state.selected[category]) {
-    if (!counts.has(selected)) counts.set(selected, 0);
-  }
-
-  return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-}
-
-function searchOptionCounts(counts, category) {
-  const key = fieldConfig[category].searchKey;
-  if (!key || !state.filterSearch[key]) return counts;
-  const term = normalize(state.filterSearch[key]);
-  return counts.filter(([value]) => normalize(value).includes(term));
-}
-
-function sortedOptions(counts, category) {
-  const selected = state.selected[category];
-  return [...counts].sort((a, b) => {
-    if (selected.has(a[0]) !== selected.has(b[0])) return selected.has(a[0]) ? -1 : 1;
-    return a[0].localeCompare(b[0]);
-  });
+  const term = normalize(state.filterSearch[category] || "");
+  return [...counts.entries()]
+    .filter(([value]) => !term || normalize(value).includes(term))
+    .sort((a, b) => {
+      const selectedA = state.selected[category].has(a[0]);
+      const selectedB = state.selected[category].has(b[0]);
+      return selectedA !== selectedB ? (selectedA ? -1 : 1) : a[0].localeCompare(b[0]);
+    });
 }
 
 function renderFilterLists() {
-  for (const category of Object.keys(fieldConfig)) renderFilterList(category);
+  categoryKeys.forEach(renderFilterList);
   updateCounts();
+  syncFilterA11y();
 }
-
 function renderFilterList(category) {
-  const cfg = fieldConfig[category];
+  const cfg = categories[category];
   const container = els[cfg.listId];
   const columnDetected = Boolean(state.columns[cfg.column]);
-  let counts = columnDetected ? valueCounts(optionRows(category), category) : [];
-  counts = sortedOptions(searchOptionCounts(counts, category), category);
+  const counts = optionCounts(category);
 
   if (!counts.length) {
-    container.textContent = columnDetected ? cfg.empty : `Colonne ${categoryLabel(category).toLowerCase()} non détectée`;
+    container.textContent = columnDetected ? cfg.empty : `Colonne ${cfg.label.toLowerCase()} non détectée`;
     return;
   }
 
-  const limit = category === "genre" ? Infinity : (state.filterSearch[cfg.searchKey] ? 180 : 80);
+  const limit = category === "genre" ? Infinity : (state.filterSearch[category] ? 180 : 80);
   const visible = counts.slice(0, limit);
   const hidden = counts.length - visible.length;
 
-  container.innerHTML = visible.map(([value, count]) => {
-    const checked = state.selected[category].has(value) ? "checked" : "";
-    return `
-      <label class="filter-option">
-        <input type="checkbox" value="${escapeHtml(value)}" ${checked} />
-        <span class="filter-option__content">
-          <span class="filter-option__label">${escapeHtml(value)}</span>
-          <span class="filter-option__count">${count}</span>
-        </span>
-      </label>`;
-  }).join("") + (hidden > 0 ? `<p class="hint">+${hidden} autres. Recherchez pour réduire la liste.</p>` : "");
-
-  container.querySelectorAll("input").forEach(input => {
-    input.addEventListener("change", () => {
-      setFilterSelection(category, input.value, input.checked);
-    });
-  });
-
-  container.querySelectorAll(".filter-option").forEach(option => {
-    option.addEventListener("pointerdown", event => {
-      if (!shouldUseImmediateFilterTap(event)) return;
-      const input = option.querySelector("input");
-      if (!input) return;
-      event.preventDefault();
-      setFilterSelection(category, input.value, !input.checked);
-    });
-  });
+  container.innerHTML = visible.map(([value, count]) => `
+    <label class="filter-option">
+      <input type="checkbox" value="${escapeHtml(value)}" ${state.selected[category].has(value) ? "checked" : ""}>
+      <span class="filter-option__content">
+        <span class="filter-option__label">${escapeHtml(value)}</span>
+        <span class="filter-option__count">${count}</span>
+      </span>
+    </label>`).join("") + (hidden ? `<p class="hint">+${hidden} autres. Recherchez pour réduire la liste.</p>` : "");
 }
 
 function setFilterSelection(category, value, selected) {
-  if (selected) state.selected[category].add(value);
-  else state.selected[category].delete(value);
+  state.selected[category][selected ? "add" : "delete"](value);
   render();
 }
+function immediateFilterTap(category, option, event) {
+  if (event.pointerType && event.pointerType !== "touch") return;
+  if (![els.actorFilterSearch, els.directorFilterSearch].includes(document.activeElement)) return;
 
-function shouldUseImmediateFilterTap(event) {
-  if (event.pointerType && event.pointerType !== "touch") return false;
-  const active = document.activeElement;
-  return active === els.actorFilterSearch || active === els.directorFilterSearch;
+  const input = option.querySelector("input");
+  if (!input) return;
+  event.preventDefault();
+  setFilterSelection(category, input.value, !input.checked);
 }
 
 function sortRows(rows) {
   const [field, direction] = state.sort.split("-");
-  const multiplier = direction === "desc" ? -1 : 1;
-  return [...rows].sort((a, b) => compare(sortValue(a, field), sortValue(b, field), multiplier));
+  const sign = direction === "desc" ? -1 : 1;
+  return [...rows].sort((a, b) => compare(sortValue(a, field), sortValue(b, field), sign));
 }
-
 function sortValue(row, field) {
   if (field === "runtime") return parseRuntime(cell(row, "runtime"));
-  if (field === "year") return parseNumber(cell(row, "year"));
-  if (field === "imdbRating") return parseNumber(cell(row, "imdbRating"));
+  if (field === "year" || field === "imdbRating") return parseNumber(cell(row, field));
   if (field === "originalTitle") return displayOriginalTitle(row);
   if (field === "country") return mainCountry(cell(row, "country"));
   return displayTitle(row);
 }
-
-function compare(a, b, multiplier) {
-  const aNumber = typeof a === "number";
-  const bNumber = typeof b === "number";
-  if (aNumber || bNumber) {
-    const aValid = Number.isFinite(a);
-    const bValid = Number.isFinite(b);
-    if (!aValid && !bValid) return 0;
-    if (!aValid) return 1;
-    if (!bValid) return -1;
-    return (a - b) * multiplier;
+function compare(a, b, sign) {
+  const numberSort = typeof a === "number" || typeof b === "number";
+  if (numberSort) {
+    const validA = Number.isFinite(a);
+    const validB = Number.isFinite(b);
+    if (!validA && !validB) return 0;
+    if (!validA) return 1;
+    if (!validB) return -1;
+    return (a - b) * sign;
   }
 
   const left = String(a || "").trim();
@@ -461,17 +356,7 @@ function compare(a, b, multiplier) {
   if (!left && !right) return 0;
   if (!left) return 1;
   if (!right) return -1;
-  return left.localeCompare(right) * multiplier;
-}
-
-function displayTitle(row) {
-  return cell(row, "title") || cell(row, "originalTitle") || "Sans titre";
-}
-
-function displayOriginalTitle(row) {
-  const original = cell(row, "originalTitle");
-  const title = cell(row, "title");
-  return original && original !== title ? original : "";
+  return left.localeCompare(right) * sign;
 }
 
 function render() {
@@ -481,40 +366,33 @@ function render() {
     return Number.isFinite(runtime) ? sum + runtime : sum;
   }, 0);
 
-  els.status.innerHTML = `
-    <span><strong>${rows.length}</strong> / ${state.rows.length} films</span>
-    <span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> durée totale</span>`;
-
+  els.status.innerHTML = `<span><strong>${rows.length}</strong> / ${state.rows.length} films</span><span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> durée totale</span>`;
   renderActiveFilters();
   renderFilterLists();
   els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `<div class="empty">Aucun film ne correspond aux filtres actuels.</div>`;
 }
-
 function renderMovieCard(row) {
-  const title = displayTitle(row);
-  const originalTitle = displayOriginalTitle(row);
-  const runtime = parseRuntime(cell(row, "runtime"));
   const rating = cell(row, "imdbRating");
-  const country = mainCountry(cell(row, "country"));
-  const genres = parseList(cell(row, "genres"));
-  const actors = parseList(cell(row, "actors"));
-  const directors = parseList(cell(row, "directors"));
+  const runtime = parseRuntime(cell(row, "runtime"));
   const year = cell(row, "year");
-
-  const meta = [
-    rating ? `<span class="meta-badge meta-badge--rating ${ratingClass(rating)}">IMDb ${escapeHtml(rating)}</span>` : "",
-    `<span class="meta-badge">${escapeHtml(formatRuntime(runtime))}</span>`,
-    year ? `<span class="meta-badge">${escapeHtml(year)}</span>` : "",
-    country ? `<span class="meta-badge">${escapeHtml(country)}</span>` : ""
-  ].join("");
+  const country = mainCountry(cell(row, "country"));
+  const genres = listFor(row, "genre");
+  const actors = listFor(row, "actor");
+  const directors = listFor(row, "director");
+  const originalTitle = displayOriginalTitle(row);
 
   return `
     <article class="movie-card">
       <header class="movie-card__header">
-        <h2>${escapeHtml(title)}</h2>
+        <h2>${escapeHtml(displayTitle(row))}</h2>
         ${originalTitle ? `<p class="original-title">${escapeHtml(originalTitle)}</p>` : ""}
       </header>
-      <div class="badge-row">${meta}</div>
+      <div class="badge-row">
+        ${rating ? `<span class="meta-badge meta-badge--rating ${ratingClass(rating)}">IMDb ${escapeHtml(rating)}</span>` : ""}
+        <span class="meta-badge">${escapeHtml(formatRuntime(runtime))}</span>
+        ${year ? `<span class="meta-badge">${escapeHtml(year)}</span>` : ""}
+        ${country ? `<span class="meta-badge">${escapeHtml(country)}</span>` : ""}
+      </div>
       <div class="credits">
         ${directors.length ? `<p><strong>Réalisation :</strong> ${highlightList(directors, state.selected.director)}</p>` : ""}
         ${actors.length ? `<p class="actors-line"><strong>Acteurs :</strong> ${highlightList(actors, state.selected.actor)}</p>` : ""}
@@ -522,45 +400,32 @@ function renderMovieCard(row) {
       <div class="chips">${genres.map(genre => `<span class="genre-chip ${state.selected.genre.has(genre) ? "genre-chip--selected" : ""}">${escapeHtml(genre)}</span>`).join("")}</div>
     </article>`;
 }
-
 function ratingClass(value) {
   const score = parseNumber(value);
   if (!Number.isFinite(score)) return "meta-badge--rating-unknown";
-  if (score >= 8) return "meta-badge--rating-good";
-  if (score >= 7) return "meta-badge--rating-mid";
-  return "meta-badge--rating-low";
+  return score >= 8 ? "meta-badge--rating-good" : score >= 7 ? "meta-badge--rating-mid" : "meta-badge--rating-low";
 }
-
 function highlightList(values, selected) {
-  return values.map(value => {
-    const cls = selected.has(value) ? "credit-token selected-credit" : "credit-token";
-    return `<span class="${cls}">${escapeHtml(value)}</span>`;
-  }).join(`<span class="credit-separator">, </span>`);
+  return values.map(value => `<span class="credit-token ${selected.has(value) ? "selected-credit" : ""}">${escapeHtml(value)}</span>`).join(`<span class="credit-separator">, </span>`);
 }
 
+function activeFilters() {
+  return [
+    ...(state.search ? [{ group: "Recherche", category: "search", value: state.search }] : []),
+    ...categoryKeys.flatMap(category => [...state.selected[category]].map(value => ({ group: categories[category].label, category, value })))
+  ];
+}
 function renderActiveFilters() {
-  const items = [];
-  if (state.search) items.push({ group: "Recherche", category: "search", value: state.search });
-  for (const [category, label] of [["genre", "Genre"], ["actor", "Acteur"], ["director", "Réalisateur"]]) {
-    for (const value of state.selected[category]) items.push({ group: label, category, value });
-  }
-
-  els.activeFilters.innerHTML = items.map(item => `
+  els.activeFilters.innerHTML = activeFilters().map(item => `
     <span class="active-filter-chip">
       <span>${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>
       <button class="filter-remove" type="button" data-category="${item.category}" data-value="${escapeHtml(item.value)}" aria-label="Retirer le filtre ${escapeHtml(item.group)}">×</button>
     </span>`).join("");
 }
-
-function activeCount() {
-  return state.selected.genre.size + state.selected.actor.size + state.selected.director.size + (state.search ? 1 : 0);
-}
-
+function activeCount() { return activeFilters().length; }
 function updateCounts() {
   els.filterCount.textContent = String(activeCount());
-  els.genreSelectedCount.textContent = String(state.selected.genre.size);
-  els.actorSelectedCount.textContent = String(state.selected.actor.size);
-  els.directorSelectedCount.textContent = String(state.selected.director.size);
+  categoryKeys.forEach(category => { els[categories[category].countId].textContent = String(state.selected[category].size); });
 }
 
 function setActivePanel(category) {
@@ -570,11 +435,8 @@ function setActivePanel(category) {
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
   });
-  document.querySelectorAll("[data-filter-panel]").forEach(panel => {
-    panel.hidden = panel.dataset.filterPanel !== category;
-  });
+  document.querySelectorAll("[data-filter-panel]").forEach(panel => { panel.hidden = panel.dataset.filterPanel !== category; });
 }
-
 function openFilters() {
   state.lastFocus = document.activeElement;
   state.filtersOpen = true;
@@ -584,7 +446,6 @@ function openFilters() {
   syncFilterA11y();
   requestAnimationFrame(() => els.closeFilters.focus());
 }
-
 function closeFilters() {
   setFilterSearchFocus(false);
   state.filtersOpen = false;
@@ -595,37 +456,70 @@ function closeFilters() {
   if (state.lastFocus?.focus) state.lastFocus.focus();
   state.lastFocus = null;
 }
-
 function syncFilterA11y() {
-  const isDesktop = DESKTOP_QUERY.matches;
-  const visible = isDesktop || state.filtersOpen;
-  const isModal = !isDesktop && state.filtersOpen;
+  const desktop = DESKTOP_QUERY.matches;
+  if (desktop) {
+    state.filtersOpen = false;
+    els.filterPanel.classList.remove("is-open");
+    els.filterBackdrop.hidden = true;
+    document.body.classList.remove("filters-open");
+  }
 
+  const visible = desktop || state.filtersOpen;
+  const modal = !desktop && state.filtersOpen;
   els.filterPanel.setAttribute("aria-hidden", String(!visible));
   els.filterPanel.toggleAttribute("inert", !visible);
-
-  if (isModal) {
+  syncFocusableFallback(!visible);
+  if (modal) {
     els.filterPanel.setAttribute("role", "dialog");
     els.filterPanel.setAttribute("aria-modal", "true");
   } else {
     els.filterPanel.removeAttribute("role");
     els.filterPanel.removeAttribute("aria-modal");
   }
+}
+function syncFocusableFallback(disabled) {
+  if (SUPPORTS_INERT) return;
+  els.filterPanel.querySelectorAll(PANEL_FOCUSABLE).forEach(control => {
+    if (disabled) {
+      if (!("previousTabIndex" in control.dataset)) control.dataset.previousTabIndex = control.getAttribute("tabindex") ?? "";
+      control.setAttribute("tabindex", "-1");
+      return;
+    }
 
-  if (isDesktop) {
-    state.filtersOpen = false;
-    els.filterPanel.classList.remove("is-open");
-    els.filterBackdrop.hidden = true;
-    document.body.classList.remove("filters-open");
-  }
+    if (!("previousTabIndex" in control.dataset)) return;
+    const previous = control.dataset.previousTabIndex;
+    if (previous) control.setAttribute("tabindex", previous);
+    else control.removeAttribute("tabindex");
+    delete control.dataset.previousTabIndex;
+  });
+}
+function focusableFilterControls() {
+  return [...els.filterPanel.querySelectorAll(FOCUSABLE)].filter(control => !control.closest("[hidden]") && control.getClientRects().length);
+}
+function trapFilterFocus(event) {
+  if (event.key !== "Tab" || !state.filtersOpen || DESKTOP_QUERY.matches) return;
+  const focusable = focusableFilterControls();
+  const first = focusable[0] || els.filterPanel;
+  const last = focusable[focusable.length - 1] || els.filterPanel;
+
+  if (!els.filterPanel.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+  else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+function setFilterSearchFocus(isFocused) {
+  els.filterPanel.classList.toggle("filter-panel--searching", isFocused);
+  if (!isFocused) return;
+  window.setTimeout(() => {
+    if (els.filterPanel.contains(document.activeElement)) document.activeElement.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 80);
 }
 
 function clearFilters() {
-  resetFilterState();
-  syncFilterControls();
+  resetFilters();
+  syncControls();
   render();
 }
-
 function removeFilter(category, value) {
   if (category === "search") {
     state.search = "";
@@ -636,54 +530,30 @@ function removeFilter(category, value) {
   render();
 }
 
-function setFilterSearchFocus(isFocused) {
-  els.filterPanel.classList.toggle("filter-panel--searching", isFocused);
-  if (isFocused) {
-    window.setTimeout(() => {
-      const active = document.activeElement;
-      if (active && els.filterPanel.contains(active)) {
-        active.scrollIntoView({ block: "center", behavior: "smooth" });
-      }
-    }, 80);
-  }
-}
-
-function trapFilterFocus(event) {
-  if (event.key !== "Tab" || !state.filtersOpen || DESKTOP_QUERY.matches) return;
-
-  const focusable = [...els.filterPanel.querySelectorAll(FILTER_FOCUSABLE_SELECTOR)]
-    .filter(el => !el.closest("[hidden]") && el.offsetParent !== null);
-  if (!focusable.length) {
-    event.preventDefault();
-    els.filterPanel.focus();
-    return;
-  }
-
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (!els.filterPanel.contains(document.activeElement)) {
-    event.preventDefault();
-    first.focus();
-  } else if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
 function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
-  els.genreMatchMode.addEventListener("change", event => { state.matchMode.genre = event.target.value; render(); });
-  els.actorMatchMode.addEventListener("change", event => { state.matchMode.actor = event.target.value; render(); });
-  els.directorMatchMode.addEventListener("change", event => { state.matchMode.director = event.target.value; render(); });
-  els.actorFilterSearch.addEventListener("input", event => { state.filterSearch.actor = event.target.value; renderFilterLists(); });
-  els.directorFilterSearch.addEventListener("input", event => { state.filterSearch.director = event.target.value; renderFilterLists(); });
-  [els.actorFilterSearch, els.directorFilterSearch].forEach(input => {
+  categoryKeys.forEach(category => byId(`${category}MatchMode`).addEventListener("change", event => { state.matchMode[category] = event.target.value; render(); }));
+
+  ["actor", "director"].forEach(category => {
+    const input = els[categories[category].searchId];
+    input.addEventListener("input", event => { state.filterSearch[category] = event.target.value; renderFilterLists(); });
     input.addEventListener("focus", () => setFilterSearchFocus(true));
     input.addEventListener("blur", () => window.setTimeout(() => setFilterSearchFocus(false), 120));
+  });
+
+  categoryKeys.forEach(category => {
+    const list = els[categories[category].listId];
+    list.addEventListener("change", event => {
+      if (event.target.matches("input[type='checkbox']")) setFilterSelection(category, event.target.value, event.target.checked);
+    });
+    list.addEventListener("touchstart", event => {
+      const option = event.target.closest(".filter-option");
+      if (option) immediateFilterTap(category, option, event);
+    }, { passive: false });
+    list.addEventListener("pointerdown", event => {
+      if (event.pointerType !== "touch") immediateFilterTap(category, event.target.closest(".filter-option"), event);
+    });
   });
 
   els.clearFilters.addEventListener("click", clearFilters);
@@ -697,11 +567,7 @@ function bindEvents() {
     const button = event.target.closest("button[data-category]");
     if (button) removeFilter(button.dataset.category, button.dataset.value);
   });
-
-  document.querySelectorAll("[data-filter-category]").forEach(button => {
-    button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory));
-  });
-
+  document.querySelectorAll("[data-filter-category]").forEach(button => button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory)));
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && state.filtersOpen) closeFilters();
     trapFilterFocus(event);
