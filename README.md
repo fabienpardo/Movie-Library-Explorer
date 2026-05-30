@@ -28,6 +28,6 @@ Déposer les fichiers à la racine du dépôt GitHub Pages. Aucun backend ni bui
 
 Si une colonne Google Sheets n’est pas détectée, modifier `columnAliases` en haut de `script.js`.
 
-## Note v7.1
+## Note v7.2
 
-Refactorisation de `script.js` et `style.css` pour réduire la duplication sans retirer de fonctionnalité.
+Correctif sur la suppression des filtres actifs contenant des caractères spéciaux, et découplage partiel entre rendu des listes et synchronisation accessibilité du panneau mobile.

@@ -4,6 +4,7 @@ const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEE
 const DESKTOP_QUERY = window.matchMedia("(min-width: 760px)");
 const SUPPORTS_INERT = "inert" in HTMLElement.prototype;
 const FOCUSABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])";
+// Used by the inert fallback: includes controls even when they have already been forced to tabindex=-1.
 const PANEL_FOCUSABLE = "a[href],button,input,select,textarea,[tabindex]";
 
 const columnAliases = {
@@ -24,6 +25,7 @@ const categories = {
   director: { label: "Réalisateur", column: "directors", listId: "directorList", countId: "directorSelectedCount", searchId: "directorFilterSearch", empty: "Aucun réalisateur disponible pour les filtres actuels" }
 };
 const categoryKeys = Object.keys(categories);
+const searchableCategories = categoryKeys.filter(category => categories[category].searchId);
 
 const els = {};
 const state = {
@@ -60,6 +62,7 @@ function parseRuntime(value) {
   const raw = String(value || "").toLowerCase().trim();
   if (!raw) return Number.NaN;
 
+  // Plain numeric values are treated as minutes because the source data is expected to store runtimes in minutes.
   const hm = raw.match(/(\d+)\s*(h|hr|hrs|hour|hours)\s*(\d+)?\s*(m|min|mins|minute|minutes)?/i);
   if (hm) return Number(hm[1]) * 60 + Number(hm[3] || 0);
 
@@ -193,7 +196,6 @@ function resetAfterLoadFailure() {
   resetData();
   resetFilters();
   syncControls();
-  setActivePanel(state.activePanel);
   renderActiveFilters();
   renderFilterLists();
   els.diagnostics.hidden = true;
@@ -287,7 +289,7 @@ function optionCounts(category) {
 function renderFilterLists() {
   categoryKeys.forEach(renderFilterList);
   updateCounts();
-  syncFilterA11y();
+  syncDynamicFocusableFallback();
 }
 function renderFilterList(category) {
   const cfg = categories[category];
@@ -318,11 +320,15 @@ function setFilterSelection(category, value, selected) {
   state.selected[category][selected ? "add" : "delete"](value);
   render();
 }
+function isFilterSearchFocused() {
+  return searchableCategories.some(category => els[categories[category].searchId] === document.activeElement);
+}
 function immediateFilterTap(category, option, event) {
   if (event.pointerType && event.pointerType !== "touch") return;
-  if (![els.actorFilterSearch, els.directorFilterSearch].includes(document.activeElement)) return;
+  // iOS Safari can use the first tap after typing to dismiss the keyboard; select immediately only in that state.
+  if (!isFilterSearchFocused()) return;
 
-  const input = option.querySelector("input");
+  const input = option?.querySelector("input");
   if (!input) return;
   event.preventDefault();
   setFilterSelection(category, input.value, !input.checked);
@@ -416,16 +422,23 @@ function activeFilters() {
   ];
 }
 function renderActiveFilters() {
-  els.activeFilters.innerHTML = activeFilters().map(item => `
+  els.activeFilters.innerHTML = activeFilters().map((item, index) => `
     <span class="active-filter-chip">
       <span>${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>
-      <button class="filter-remove" type="button" data-category="${item.category}" data-value="${escapeHtml(item.value)}" aria-label="Retirer le filtre ${escapeHtml(item.group)}">×</button>
+      <button class="filter-remove" type="button" data-filter-index="${index}" aria-label="Retirer le filtre ${escapeHtml(item.group)}">×</button>
     </span>`).join("");
 }
 function activeCount() { return activeFilters().length; }
 function updateCounts() {
-  els.filterCount.textContent = String(activeCount());
-  categoryKeys.forEach(category => { els[categories[category].countId].textContent = String(state.selected[category].size); });
+  const total = activeCount();
+  els.filterCount.textContent = String(total);
+  els.filterCount.hidden = total === 0;
+  categoryKeys.forEach(category => {
+    const count = state.selected[category].size;
+    const badge = els[categories[category].countId];
+    badge.textContent = String(count);
+    badge.hidden = count === 0;
+  });
 }
 
 function setActivePanel(category) {
@@ -456,6 +469,9 @@ function closeFilters() {
   if (state.lastFocus?.focus) state.lastFocus.focus();
   state.lastFocus = null;
 }
+function isFilterPanelVisible() {
+  return DESKTOP_QUERY.matches || state.filtersOpen;
+}
 function syncFilterA11y() {
   const desktop = DESKTOP_QUERY.matches;
   if (desktop) {
@@ -465,7 +481,7 @@ function syncFilterA11y() {
     document.body.classList.remove("filters-open");
   }
 
-  const visible = desktop || state.filtersOpen;
+  const visible = isFilterPanelVisible();
   const modal = !desktop && state.filtersOpen;
   els.filterPanel.setAttribute("aria-hidden", String(!visible));
   els.filterPanel.toggleAttribute("inert", !visible);
@@ -477,6 +493,9 @@ function syncFilterA11y() {
     els.filterPanel.removeAttribute("role");
     els.filterPanel.removeAttribute("aria-modal");
   }
+}
+function syncDynamicFocusableFallback() {
+  if (!SUPPORTS_INERT && !isFilterPanelVisible()) syncFocusableFallback(true);
 }
 function syncFocusableFallback(disabled) {
   if (SUPPORTS_INERT) return;
@@ -535,7 +554,7 @@ function bindEvents() {
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
   categoryKeys.forEach(category => byId(`${category}MatchMode`).addEventListener("change", event => { state.matchMode[category] = event.target.value; render(); }));
 
-  ["actor", "director"].forEach(category => {
+  searchableCategories.forEach(category => {
     const input = els[categories[category].searchId];
     input.addEventListener("input", event => { state.filterSearch[category] = event.target.value; renderFilterLists(); });
     input.addEventListener("focus", () => setFilterSearchFocus(true));
@@ -564,8 +583,10 @@ function bindEvents() {
   els.filterBackdrop.addEventListener("click", closeFilters);
 
   els.activeFilters.addEventListener("click", event => {
-    const button = event.target.closest("button[data-category]");
-    if (button) removeFilter(button.dataset.category, button.dataset.value);
+    const button = event.target.closest("button[data-filter-index]");
+    if (!button) return;
+    const item = activeFilters()[Number(button.dataset.filterIndex)];
+    if (item) removeFilter(item.category, item.value);
   });
   document.querySelectorAll("[data-filter-category]").forEach(button => button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory)));
   document.addEventListener("keydown", event => {
