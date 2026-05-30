@@ -353,12 +353,19 @@ function sortRows(rows) {
   const sign = direction === "desc" ? -1 : 1;
   return [...rows].sort((a, b) => compare(sortValue(a, field), sortValue(b, field), sign));
 }
+function sortableTitle(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^(?:l[’']|le|la|les|un|une|des|the|a|an)\s+/i, "")
+    .replace(/^(?:l[’'])/i, "")
+    .trim();
+}
 function sortValue(row, field) {
   if (field === "runtime") return parseRuntime(cell(row, "runtime"));
   if (field === "year" || field === "imdbRating") return parseNumber(cell(row, field));
-  if (field === "originalTitle") return displayOriginalTitle(row);
+  if (field === "originalTitle") return sortableTitle(displayOriginalTitle(row));
   if (field === "country") return mainCountry(cell(row, "country"));
-  return displayTitle(row);
+  return sortableTitle(displayTitle(row));
 }
 function compare(a, b, sign) {
   const numberSort = typeof a === "number" || typeof b === "number";

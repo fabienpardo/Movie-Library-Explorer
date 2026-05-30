@@ -32,3 +32,7 @@ Si une colonne Google Sheets n’est pas détectée, modifier `columnAliases` en
 ## Note v7.4
 
 Ajout d’un lien IMDb sur le titre des films quand la colonne URL est disponible dans Google Sheets.
+
+## Note v7.5
+
+Le tri alphabétique des titres ignore les articles initiaux courants, par exemple `Le`, `La`, `Les`, `L’`, `The`, `A` et `An`. Les titres affichés restent inchangés.
