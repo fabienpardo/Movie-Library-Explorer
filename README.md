@@ -9,6 +9,7 @@ Application statique GitHub Pages pour explorer une bibliothèque de films publi
 - Options de filtres dynamiques : les valeurs sans résultat sont masquées, sauf si elles sont déjà sélectionnées.
 - Mise en évidence des filtres sélectionnés dans les cartes de films.
 - Couleurs IMDb : vert pour `8.0+`, jaune pour `7.0–7.9`, rouge sous `7.0`.
+- Titre du film cliquable vers IMDb quand une colonne URL est disponible.
 - Panneau de filtres mobile et barre latérale desktop.
 - Icônes favicon, iOS et manifeste incluses.
 
@@ -28,6 +29,6 @@ Déposer les fichiers à la racine du dépôt GitHub Pages. Aucun backend ni bui
 
 Si une colonne Google Sheets n’est pas détectée, modifier `columnAliases` en haut de `script.js`.
 
-## Note v7.2
+## Note v7.4
 
-Correctif sur la suppression des filtres actifs contenant des caractères spéciaux, et découplage partiel entre rendu des listes et synchronisation accessibilité du panneau mobile.
+Ajout d’un lien IMDb sur le titre des films quand la colonne URL est disponible dans Google Sheets.

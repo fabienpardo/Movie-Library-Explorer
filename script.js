@@ -14,6 +14,7 @@ const columnAliases = {
   runtime: ["runtime", "runtime min", "runtime mins", "runtime minutes", "duration", "duration min", "duration mins", "duration minutes", "running time"],
   year: ["year", "release year", "movie year"],
   imdbRating: ["imdb rating", "imdb", "imdb score", "imdb rate", "imdb user rating"],
+  url: ["url", "link", "movie url", "imdb url", "imdb link", "imdb title url", "imdb page", "imdb title page"],
   country: ["country", "countries", "production country", "production countries", "main country", "origin country", "country of origin", "nationality"],
   actors: ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"],
   directors: ["director", "directors", "directed by"]
@@ -40,7 +41,8 @@ const state = {
   selected: { genre: new Set(), actor: new Set(), director: new Set() },
   activePanel: "genre",
   filtersOpen: false,
-  lastFocus: null
+  lastFocus: null,
+  backToTopVisible: null
 };
 
 function byId(id) { return document.getElementById(id); }
@@ -83,7 +85,7 @@ function cacheEls() {
   [
     "status", "diagnostics", "movieGrid", "activeFilters", "filterPanel", "filterBackdrop",
     "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
-    "searchInput", "sortSelect", "genreMatchMode", "actorMatchMode", "directorMatchMode"
+    "searchInput", "sortSelect", "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode"
   ].forEach(id => { els[id] = byId(id); });
 
   for (const cfg of Object.values(categories)) {
@@ -152,6 +154,7 @@ function detectColumns(labels) {
       runtime: pick(columnAliases.runtime),
       year: pick(columnAliases.year),
       imdbRating: pick(columnAliases.imdbRating),
+      url: pick(columnAliases.url),
       country: pick(columnAliases.country),
       actors: pick(columnAliases.actors),
       directors: pick(columnAliases.directors)
@@ -170,6 +173,17 @@ function displayOriginalTitle(row) {
   const original = cell(row, "originalTitle");
   const title = cell(row, "title");
   return original && original !== title ? original : "";
+}
+function movieUrl(row) {
+  const raw = cell(row, "url").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
 }
 
 function resetData() {
@@ -376,6 +390,7 @@ function render() {
   renderActiveFilters();
   renderFilterLists();
   els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `<div class="empty">Aucun film ne correspond aux filtres actuels.</div>`;
+  requestAnimationFrame(syncBackToTop);
 }
 function renderMovieCard(row) {
   const rating = cell(row, "imdbRating");
@@ -385,12 +400,15 @@ function renderMovieCard(row) {
   const genres = listFor(row, "genre");
   const actors = listFor(row, "actor");
   const directors = listFor(row, "director");
+  const title = displayTitle(row);
   const originalTitle = displayOriginalTitle(row);
+  const url = movieUrl(row);
+  const titleContent = escapeHtml(title);
 
   return `
     <article class="movie-card">
       <header class="movie-card__header">
-        <h2>${escapeHtml(displayTitle(row))}</h2>
+        <h2>${url ? `<a class="movie-title-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir ${titleContent} sur IMDb">${titleContent}</a>` : titleContent}</h2>
         ${originalTitle ? `<p class="original-title">${escapeHtml(originalTitle)}</p>` : ""}
       </header>
       <div class="badge-row">
@@ -457,6 +475,7 @@ function openFilters() {
   els.filterBackdrop.hidden = false;
   document.body.classList.add("filters-open");
   syncFilterA11y();
+  syncBackToTop();
   requestAnimationFrame(() => els.closeFilters.focus());
 }
 function closeFilters() {
@@ -466,6 +485,7 @@ function closeFilters() {
   els.filterBackdrop.hidden = true;
   document.body.classList.remove("filters-open");
   syncFilterA11y();
+  syncBackToTop();
   if (state.lastFocus?.focus) state.lastFocus.focus();
   state.lastFocus = null;
 }
@@ -534,6 +554,18 @@ function setFilterSearchFocus(isFocused) {
   }, 80);
 }
 
+function syncBackToTop() {
+  const pageIsLong = document.documentElement.scrollHeight > window.innerHeight * 1.5;
+  const visible = pageIsLong && window.scrollY > 700 && !state.filtersOpen;
+  if (visible === state.backToTopVisible) return;
+  state.backToTopVisible = visible;
+  els.backToTop.hidden = !visible;
+  els.backToTop.classList.toggle("is-visible", visible);
+}
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function clearFilters() {
   resetFilters();
   syncControls();
@@ -581,6 +613,8 @@ function bindEvents() {
   els.closeFilters.addEventListener("click", closeFilters);
   els.applyFilters.addEventListener("click", closeFilters);
   els.filterBackdrop.addEventListener("click", closeFilters);
+  els.backToTop.addEventListener("click", scrollToTop);
+  window.addEventListener("scroll", syncBackToTop, { passive: true });
 
   els.activeFilters.addEventListener("click", event => {
     const button = event.target.closest("button[data-filter-index]");
@@ -602,4 +636,5 @@ cacheEls();
 bindEvents();
 setActivePanel(state.activePanel);
 syncFilterA11y();
+syncBackToTop();
 loadSheet();
