@@ -3,6 +3,9 @@ const GID = "70337195";
 const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${GID}&single=true&output=csv`;
 const DESKTOP_QUERY = window.matchMedia("(min-width: 760px)");
 const FILTER_FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), select:not([disabled])";
+const DEFAULT_OPTION_LIMIT = 80;
+const SEARCH_OPTION_LIMIT = 180;
+const OPTION_LIMIT_INCREMENT = 80;
 
 // Update these aliases if the Google Sheet column names change.
 const columnAliases = {
@@ -28,7 +31,7 @@ const state = {
   filterSearch: { actor: "", director: "" },
   matchMode: { genre: "any", actor: "any", director: "any" },
   selected: { genre: new Set(), actor: new Set(), director: new Set() },
-  optionLimit: { actor: 80, director: 80 },
+  optionLimit: { actor: DEFAULT_OPTION_LIMIT, director: DEFAULT_OPTION_LIMIT },
   activePanel: "genre",
   filtersOpen: false,
   lastFocus: null
@@ -223,7 +226,7 @@ function resetFilterState() {
   state.filterSearch.actor = "";
   state.filterSearch.director = "";
   state.matchMode = { genre: "any", actor: "any", director: "any" };
-  state.optionLimit = { actor: 80, director: 80 };
+  state.optionLimit = { actor: DEFAULT_OPTION_LIMIT, director: DEFAULT_OPTION_LIMIT };
   for (const set of Object.values(state.selected)) set.clear();
 }
 
@@ -383,6 +386,13 @@ function renderFilterLists() {
   updateCounts();
 }
 
+function optionLimit(category) {
+  if (category === "genre") return Infinity;
+  const cfg = fieldConfig[category];
+  const searchActive = Boolean(cfg.searchKey && state.filterSearch[cfg.searchKey]);
+  return Math.max(state.optionLimit[category], searchActive ? SEARCH_OPTION_LIMIT : DEFAULT_OPTION_LIMIT);
+}
+
 function renderFilterList(category) {
   const cfg = fieldConfig[category];
   const container = els[cfg.listId];
@@ -395,7 +405,7 @@ function renderFilterList(category) {
     return;
   }
 
-  const limit = category === "genre" ? Infinity : (state.filterSearch[cfg.searchKey] ? 180 : state.optionLimit[category]);
+  const limit = optionLimit(category);
   const visible = counts.slice(0, limit);
   const hidden = counts.length - visible.length;
 
@@ -423,7 +433,7 @@ function renderFilterList(category) {
 
   container.querySelectorAll("[data-show-more]").forEach(button => {
     button.addEventListener("click", () => {
-      state.optionLimit[category] += 80;
+      state.optionLimit[category] = optionLimit(category) + OPTION_LIMIT_INCREMENT;
       renderFilterList(category);
     });
   });
@@ -745,8 +755,16 @@ function bindEvents() {
   els.genreMatchMode.addEventListener("change", event => { state.matchMode.genre = event.target.value; render(); });
   els.actorMatchMode.addEventListener("change", event => { state.matchMode.actor = event.target.value; render(); });
   els.directorMatchMode.addEventListener("change", event => { state.matchMode.director = event.target.value; render(); });
-  els.actorFilterSearch.addEventListener("input", event => { state.filterSearch.actor = event.target.value; renderFilterLists(); });
-  els.directorFilterSearch.addEventListener("input", event => { state.filterSearch.director = event.target.value; renderFilterLists(); });
+  els.actorFilterSearch.addEventListener("input", event => {
+    state.filterSearch.actor = event.target.value;
+    state.optionLimit.actor = DEFAULT_OPTION_LIMIT;
+    renderFilterLists();
+  });
+  els.directorFilterSearch.addEventListener("input", event => {
+    state.filterSearch.director = event.target.value;
+    state.optionLimit.director = DEFAULT_OPTION_LIMIT;
+    renderFilterLists();
+  });
   [els.actorFilterSearch, els.directorFilterSearch].forEach(input => {
     input.addEventListener("focus", () => setFilterSearchFocus(true));
     input.addEventListener("blur", () => window.setTimeout(() => setFilterSearchFocus(false), 120));
