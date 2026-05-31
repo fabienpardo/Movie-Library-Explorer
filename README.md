@@ -36,3 +36,20 @@ Ajout d’un lien IMDb sur le titre des films quand la colonne URL est disponibl
 ## Note v7.5
 
 Le tri alphabétique des titres ignore les articles initiaux courants, par exemple `Le`, `La`, `Les`, `L’`, `The`, `A` et `An`. Les titres affichés restent inchangés.
+
+
+## Note v7.6
+
+Le tri alphabétique des titres ignore aussi la ponctuation et les symboles de classement, par exemple les points, parenthèses, guillemets et tirets. Les titres affichés restent inchangés.
+
+## Note v7.7
+
+Les filtres utilisent `Tous` par défaut. Les options de chaque filtre sont triées par nombre de résultats décroissant.
+
+## Note v7.8
+
+Les genres, acteurs et réalisateurs affichés dans les cartes sont cliquables pour ajouter ou retirer directement le filtre correspondant.
+
+## Note v7.9
+
+Nettoyage de maintenance : cache léger pour les compteurs de filtres, clarification du comportement tactile iOS, et séparation plus nette entre synchronisation d’accessibilité et changement de taille d’écran.

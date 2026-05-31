@@ -289,7 +289,21 @@ h1 {
 }
 .credits p { margin: 0; }
 .credits strong { color: white; }
-.credit-token { display: inline; }
+.card-filter-button {
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.credit-token {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.credit-token:hover { color: var(--text); text-decoration: underline; }
 .selected-credit, .genre-chip--selected, .filter-option input:checked + .filter-option__content, .filter-jump-nav__button.is-active {
   color: var(--blue-text);
   border-color: rgba(214,230,255,0.86);
@@ -297,8 +311,14 @@ h1 {
   font-weight: 850;
 }
 .selected-credit {
+  border: 1px solid rgba(214,230,255,0.86);
   border-radius: 7px;
   padding: 1px 5px;
+}
+.genre-chip.card-filter-button:hover { border-color: var(--line-strong); background: rgba(255,255,255,0.14); }
+.card-filter-button:focus-visible {
+  outline: 3px solid rgba(154,194,255,0.75);
+  outline-offset: 3px;
 }
 
 .back-to-top {

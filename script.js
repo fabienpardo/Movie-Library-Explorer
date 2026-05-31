@@ -27,6 +27,7 @@ const categories = {
 };
 const categoryKeys = Object.keys(categories);
 const searchableCategories = categoryKeys.filter(category => categories[category].searchId);
+const DEFAULT_MATCH_MODE = { genre: "all", actor: "all", director: "all" };
 
 const els = {};
 const state = {
@@ -37,12 +38,13 @@ const state = {
   search: "",
   sort: "title-asc",
   filterSearch: { actor: "", director: "" },
-  matchMode: { genre: "any", actor: "any", director: "any" },
+  matchMode: { ...DEFAULT_MATCH_MODE },
   selected: { genre: new Set(), actor: new Set(), director: new Set() },
   activePanel: "genre",
   filtersOpen: false,
   lastFocus: null,
-  backToTopVisible: null
+  backToTopVisible: null,
+  optionCountsCache: new Map()
 };
 
 function byId(id) { return document.getElementById(id); }
@@ -186,17 +188,39 @@ function movieUrl(row) {
   }
 }
 
+function encodeFilterValue(value) {
+  // Card filter values live in data attributes, so encode them before insertion and decode them on click.
+  return encodeURIComponent(String(value || ""));
+}
+function decodeFilterValue(value) {
+  try {
+    return decodeURIComponent(value || "");
+  } catch {
+    return value || "";
+  }
+}
+function filterToggleLabel(category, value) {
+  const action = state.selected[category].has(value) ? "Retirer" : "Ajouter";
+  return `${action} le filtre ${categories[category].label.toLowerCase()} ${value}`;
+}
+
+function clearOptionCountsCache() {
+  state.optionCountsCache.clear();
+}
+
 function resetData() {
   Object.assign(state, { rows: [], labels: [], columns: {}, warnings: [] });
+  clearOptionCountsCache();
 }
 function resetFilters() {
   Object.assign(state, {
     search: "",
     filterSearch: { actor: "", director: "" },
-    matchMode: { genre: "any", actor: "any", director: "any" },
+    matchMode: { ...DEFAULT_MATCH_MODE },
     activePanel: "genre"
   });
   for (const selected of Object.values(state.selected)) selected.clear();
+  clearOptionCountsCache();
 }
 function syncControls() {
   els.searchInput.value = state.search;
@@ -279,9 +303,21 @@ function matchesFilters(row, skipCategory = null) {
 }
 function filteredRows() { return state.rows.filter(row => matchesFilters(row)); }
 
-function optionCounts(category) {
+function optionCountsCacheKey(category) {
+  return JSON.stringify({
+    category,
+    search: state.search,
+    matchMode: state.matchMode,
+    selected: categoryKeys.map(key => [key, [...state.selected[key]].sort()])
+  });
+}
+
+function baseOptionCounts(category) {
   const cfg = categories[category];
   if (!state.columns[cfg.column]) return [];
+
+  const cacheKey = optionCountsCacheKey(category);
+  if (state.optionCountsCache.has(cacheKey)) return state.optionCountsCache.get(cacheKey);
 
   const skip = state.matchMode[category] === "any" ? category : null;
   const counts = new Map();
@@ -290,14 +326,14 @@ function optionCounts(category) {
   }
   for (const value of state.selected[category]) if (!counts.has(value)) counts.set(value, 0);
 
+  const sorted = [...counts.entries()].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
+  state.optionCountsCache.set(cacheKey, sorted);
+  return sorted;
+}
+
+function optionCounts(category) {
   const term = normalize(state.filterSearch[category] || "");
-  return [...counts.entries()]
-    .filter(([value]) => !term || normalize(value).includes(term))
-    .sort((a, b) => {
-      const selectedA = state.selected[category].has(a[0]);
-      const selectedB = state.selected[category].has(b[0]);
-      return selectedA !== selectedB ? (selectedA ? -1 : 1) : a[0].localeCompare(b[0]);
-    });
+  return baseOptionCounts(category).filter(([value]) => !term || normalize(value).includes(term));
 }
 
 function renderFilterLists() {
@@ -334,6 +370,10 @@ function setFilterSelection(category, value, selected) {
   state.selected[category][selected ? "add" : "delete"](value);
   render();
 }
+function toggleFilterSelection(category, value) {
+  if (!state.selected[category]) return;
+  setFilterSelection(category, value, !state.selected[category].has(value));
+}
 function isFilterSearchFocused() {
   return searchableCategories.some(category => els[categories[category].searchId] === document.activeElement);
 }
@@ -354,10 +394,22 @@ function sortRows(rows) {
   return [...rows].sort((a, b) => compare(sortValue(a, field), sortValue(b, field), sign));
 }
 function sortableTitle(value) {
-  return String(value || "")
-    .trim()
+  // Same normalization is used for title and original-title sorting: leading articles and edge punctuation do not affect rank.
+  return normalizeSortText(stripLeadingArticle(stripSortEdgePunctuation(String(value || ""))));
+}
+function stripSortEdgePunctuation(value) {
+  return value.trim().replace(/^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$/gu, "");
+}
+function stripLeadingArticle(value) {
+  return value
     .replace(/^(?:l[’']|le|la|les|un|une|des|the|a|an)\s+/i, "")
     .replace(/^(?:l[’'])/i, "")
+    .trim();
+}
+function normalizeSortText(value) {
+  return value
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 function sortValue(row, field) {
@@ -387,6 +439,7 @@ function compare(a, b, sign) {
 }
 
 function render() {
+  clearOptionCountsCache();
   const rows = sortRows(filteredRows());
   const totalRuntime = rows.reduce((sum, row) => {
     const runtime = parseRuntime(cell(row, "runtime"));
@@ -428,7 +481,7 @@ function renderMovieCard(row) {
         ${directors.length ? `<p><strong>Réalisation :</strong> ${highlightList(directors, state.selected.director)}</p>` : ""}
         ${actors.length ? `<p class="actors-line"><strong>Acteurs :</strong> ${highlightList(actors, state.selected.actor)}</p>` : ""}
       </div>
-      <div class="chips">${genres.map(genre => `<span class="genre-chip ${state.selected.genre.has(genre) ? "genre-chip--selected" : ""}">${escapeHtml(genre)}</span>`).join("")}</div>
+      <div class="chips">${genres.map(genre => renderCardFilterButton("genre", genre, "genre-chip", "genre-chip--selected")).join("")}</div>
     </article>`;
 }
 function ratingClass(value) {
@@ -437,7 +490,15 @@ function ratingClass(value) {
   return score >= 8 ? "meta-badge--rating-good" : score >= 7 ? "meta-badge--rating-mid" : "meta-badge--rating-low";
 }
 function highlightList(values, selected) {
-  return values.map(value => `<span class="credit-token ${selected.has(value) ? "selected-credit" : ""}">${escapeHtml(value)}</span>`).join(`<span class="credit-separator">, </span>`);
+  const category = selected === state.selected.director ? "director" : "actor";
+  return values
+    .map(value => renderCardFilterButton(category, value, "credit-token", "selected-credit"))
+    .join(`<span class="credit-separator">, </span>`);
+}
+function renderCardFilterButton(category, value, baseClass, selectedClass) {
+  const selected = state.selected[category].has(value);
+  const classes = [baseClass, "card-filter-button", selected ? selectedClass : ""].filter(Boolean).join(" ");
+  return `<button class="${classes}" type="button" data-card-filter-category="${category}" data-card-filter-value="${encodeFilterValue(value)}" aria-pressed="${selected}" aria-label="${escapeHtml(filterToggleLabel(category, value))}">${escapeHtml(value)}</button>`;
 }
 
 function activeFilters() {
@@ -501,13 +562,6 @@ function isFilterPanelVisible() {
 }
 function syncFilterA11y() {
   const desktop = DESKTOP_QUERY.matches;
-  if (desktop) {
-    state.filtersOpen = false;
-    els.filterPanel.classList.remove("is-open");
-    els.filterBackdrop.hidden = true;
-    document.body.classList.remove("filters-open");
-  }
-
   const visible = isFilterPanelVisible();
   const modal = !desktop && state.filtersOpen;
   els.filterPanel.setAttribute("aria-hidden", String(!visible));
@@ -521,6 +575,17 @@ function syncFilterA11y() {
     els.filterPanel.removeAttribute("aria-modal");
   }
 }
+function handleFilterViewportChange() {
+  if (DESKTOP_QUERY.matches && state.filtersOpen) {
+    state.filtersOpen = false;
+    els.filterPanel.classList.remove("is-open");
+    els.filterBackdrop.hidden = true;
+    document.body.classList.remove("filters-open");
+  }
+  syncFilterA11y();
+  syncBackToTop();
+}
+
 function syncDynamicFocusableFallback() {
   if (!SUPPORTS_INERT && !isFilterPanelVisible()) syncFocusableFallback(true);
 }
@@ -609,9 +674,12 @@ function bindEvents() {
       const option = event.target.closest(".filter-option");
       if (option) immediateFilterTap(category, option, event);
     }, { passive: false });
-    list.addEventListener("pointerdown", event => {
-      if (event.pointerType !== "touch") immediateFilterTap(category, event.target.closest(".filter-option"), event);
-    });
+  });
+
+  els.movieGrid.addEventListener("click", event => {
+    const button = event.target.closest("button[data-card-filter-category]");
+    if (!button) return;
+    toggleFilterSelection(button.dataset.cardFilterCategory, decodeFilterValue(button.dataset.cardFilterValue));
   });
 
   els.clearFilters.addEventListener("click", clearFilters);
@@ -635,8 +703,8 @@ function bindEvents() {
     trapFilterFocus(event);
   });
 
-  if (DESKTOP_QUERY.addEventListener) DESKTOP_QUERY.addEventListener("change", syncFilterA11y);
-  else DESKTOP_QUERY.addListener(syncFilterA11y);
+  if (DESKTOP_QUERY.addEventListener) DESKTOP_QUERY.addEventListener("change", handleFilterViewportChange);
+  else DESKTOP_QUERY.addListener(handleFilterViewportChange);
 }
 
 cacheEls();
