@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=6.8" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <!-- Bump CSS/JS query strings together when deploying. -->
-  <link rel="stylesheet" href="style.css?v=7.9" />
+  <link rel="stylesheet" href="style.css?v=8.0" />
 </head>
 <body>
   <header class="app-header">
@@ -122,6 +122,8 @@
 
         <label class="visually-hidden" for="sortSelect">Trier les films</label>
         <select id="sortSelect">
+          <option value="position-desc" selected>Position bibliothèque décroissante</option>
+          <option value="position-asc">Position bibliothèque croissante</option>
           <option value="title-asc">Titre A → Z</option>
           <option value="originalTitle-asc">Titre original A → Z</option>
           <option value="runtime-asc">Durée croissante</option>
@@ -146,6 +148,6 @@
 
   <button id="backToTop" class="back-to-top" type="button" aria-label="Revenir en haut de la page" hidden>↑</button>
 
-  <script src="script.js?v=7.9"></script>
+  <script src="script.js?v=8.0"></script>
 </body>
 </html>

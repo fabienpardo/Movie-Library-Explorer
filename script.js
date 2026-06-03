@@ -13,6 +13,8 @@ const columnAliases = {
   genres: ["genre", "genres"],
   runtime: ["runtime", "runtime min", "runtime mins", "runtime minutes", "duration", "duration min", "duration mins", "duration minutes", "running time"],
   year: ["year", "release year", "movie year"],
+  releaseDate: ["release date", "released", "date released", "premiere date", "theatrical release", "release"],
+  position: ["position", "library position", "library rank", "library order", "rank", "order"],
   imdbRating: ["imdb rating", "imdb", "imdb score", "imdb rate", "imdb user rating"],
   url: ["url", "link", "movie url", "imdb url", "imdb link", "imdb title url", "imdb page", "imdb title page"],
   country: ["country", "countries", "production country", "production countries", "main country", "origin country", "country of origin", "nationality"],
@@ -36,7 +38,7 @@ const state = {
   columns: {},
   warnings: [],
   search: "",
-  sort: "title-asc",
+  sort: "position-desc",
   filterSearch: { actor: "", director: "" },
   matchMode: { ...DEFAULT_MATCH_MODE },
   selected: { genre: new Set(), actor: new Set(), director: new Set() },
@@ -61,6 +63,21 @@ function parseNumber(value) {
   const match = String(value || "").replace(",", ".").match(/-?\d+(\.\d+)?/);
   return match ? Number(match[0]) : Number.NaN;
 }
+function parseDateValue(value) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.getTime();
+  const raw = String(value || "").trim();
+  if (!raw) return Number.NaN;
+
+  const iso = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (iso) return Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+
+  const dayFirst = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dayFirst) return Date.UTC(Number(dayFirst[3]), Number(dayFirst[2]) - 1, Number(dayFirst[1]));
+
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 function parseRuntime(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const raw = String(value || "").toLowerCase().trim();
@@ -155,6 +172,8 @@ function detectColumns(labels) {
       genres: pick(columnAliases.genres),
       runtime: pick(columnAliases.runtime),
       year: pick(columnAliases.year),
+      releaseDate: pick(columnAliases.releaseDate),
+      position: pick(columnAliases.position),
       imdbRating: pick(columnAliases.imdbRating),
       url: pick(columnAliases.url),
       country: pick(columnAliases.country),
@@ -278,7 +297,7 @@ function showError(message) {
   categoryKeys.forEach(category => { els[categories[category].listId].textContent = "Aucune donnée chargée"; });
 }
 function renderDiagnostics() {
-  const missing = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle"].filter(field => !state.columns[field]);
+  const missing = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle", "position", "releaseDate"].filter(field => !state.columns[field]);
   const lines = [
     ...(missing.length ? [`Champs attendus manquants : ${missing.join(", ")}`] : []),
     ...state.warnings
@@ -414,7 +433,12 @@ function normalizeSortText(value) {
 }
 function sortValue(row, field) {
   if (field === "runtime") return parseRuntime(cell(row, "runtime"));
-  if (field === "year" || field === "imdbRating") return parseNumber(cell(row, field));
+  if (field === "position") return parseNumber(cell(row, "position"));
+  if (field === "year") {
+    const releaseDate = parseDateValue(cell(row, "releaseDate"));
+    return Number.isFinite(releaseDate) ? releaseDate : parseNumber(cell(row, "year"));
+  }
+  if (field === "imdbRating") return parseNumber(cell(row, field));
   if (field === "originalTitle") return sortableTitle(displayOriginalTitle(row));
   if (field === "country") return mainCountry(cell(row, "country"));
   return sortableTitle(displayTitle(row));
