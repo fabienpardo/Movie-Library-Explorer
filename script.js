@@ -190,10 +190,11 @@ function cell(row, field) {
 }
 function listFor(row, category) { return parseList(cell(row, categories[category].column)); }
 function displayTitle(row) { return cell(row, "title") || cell(row, "originalTitle") || "Sans titre"; }
+function equivalentTitle(value) { return normalize(value); }
 function displayOriginalTitle(row) {
-  const original = cell(row, "originalTitle");
-  const title = cell(row, "title");
-  return original && original !== title ? original : "";
+  const original = cell(row, "originalTitle").trim();
+  const title = cell(row, "title").trim();
+  return original && equivalentTitle(original) !== equivalentTitle(title) ? original : "";
 }
 function movieUrl(row) {
   const raw = cell(row, "url").trim();
