@@ -54,6 +54,11 @@ Les genres, acteurs et réalisateurs affichés dans les cartes sont cliquables p
 
 Nettoyage de maintenance : cache léger pour les compteurs de filtres, clarification du comportement tactile iOS, et séparation plus nette entre synchronisation d’accessibilité et changement de taille d’écran.
 
-## Note v8.0
+## Note v8.1
 
 Le tri par défaut utilise désormais la colonne `Position` en ordre décroissant. Les options de tri incluent aussi `Position` croissante et décroissante. Le tri par année utilise `Release Date` quand la colonne est disponible, avec `Year` comme fallback.
+
+
+## v8.1
+
+- Libellés de tri simplifiés : ajout récent/ancien, durée courte/longue, sortie récente/ancienne.

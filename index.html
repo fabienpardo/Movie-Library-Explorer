@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=6.8" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <!-- Bump CSS/JS query strings together when deploying. -->
-  <link rel="stylesheet" href="style.css?v=8.0" />
+  <link rel="stylesheet" href="style.css?v=8.1" />
 </head>
 <body>
   <header class="app-header">
@@ -122,15 +122,15 @@
 
         <label class="visually-hidden" for="sortSelect">Trier les films</label>
         <select id="sortSelect">
-          <option value="position-desc" selected>Position bibliothèque décroissante</option>
-          <option value="position-asc">Position bibliothèque croissante</option>
+          <option value="position-desc" selected>Ajout récent</option>
+          <option value="position-asc">Ajout ancien</option>
           <option value="title-asc">Titre A → Z</option>
           <option value="originalTitle-asc">Titre original A → Z</option>
-          <option value="runtime-asc">Durée croissante</option>
-          <option value="runtime-desc">Durée décroissante</option>
-          <option value="imdbRating-desc">Note IMDb décroissante</option>
-          <option value="year-desc">Année décroissante</option>
-          <option value="year-asc">Année croissante</option>
+          <option value="runtime-asc">Durée courte → longue</option>
+          <option value="runtime-desc">Durée longue → courte</option>
+          <option value="imdbRating-desc">IMDb meilleure note</option>
+          <option value="year-desc">Sortie récente</option>
+          <option value="year-asc">Sortie ancienne</option>
           <option value="country-asc">Pays A → Z</option>
         </select>
 
@@ -148,6 +148,6 @@
 
   <button id="backToTop" class="back-to-top" type="button" aria-label="Revenir en haut de la page" hidden>↑</button>
 
-  <script src="script.js?v=8.0"></script>
+  <script src="script.js?v=8.1"></script>
 </body>
 </html>
