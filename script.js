@@ -164,7 +164,7 @@ function detectColumns(labels) {
       || null;
   };
 
-  const title = pick(columnAliases.title, ["original title"]);
+  const title = pick(columnAliases.title, columnAliases.originalTitle);
   return {
     columns: {
       title: title || labels[0],
@@ -437,10 +437,13 @@ function sortValue(row, field) {
   if (field === "position") return parseNumber(cell(row, "position"));
   if (field === "year") {
     const releaseDate = parseDateValue(cell(row, "releaseDate"));
-    return Number.isFinite(releaseDate) ? releaseDate : parseNumber(cell(row, "year"));
+    if (Number.isFinite(releaseDate)) return releaseDate;
+
+    const year = parseNumber(cell(row, "year"));
+    return Number.isFinite(year) ? Date.UTC(year, 0, 1) : Number.NaN;
   }
   if (field === "imdbRating") return parseNumber(cell(row, field));
-  if (field === "originalTitle") return sortableTitle(displayOriginalTitle(row));
+  if (field === "originalTitle") return sortableTitle(cell(row, "originalTitle") || displayTitle(row));
   if (field === "country") return mainCountry(cell(row, "country"));
   return sortableTitle(displayTitle(row));
 }

@@ -316,6 +316,11 @@ h1 {
   padding: 1px 5px;
 }
 .genre-chip.card-filter-button:hover { border-color: var(--line-strong); background: rgba(255,255,255,0.14); }
+.genre-chip--selected.card-filter-button:hover {
+  color: var(--blue-text);
+  border-color: rgba(214,230,255,0.86);
+  background: linear-gradient(180deg, #d8e7ff, #88b8ff);
+}
 .card-filter-button:focus-visible {
   outline: 3px solid rgba(154,194,255,0.75);
   outline-offset: 3px;
@@ -490,6 +495,10 @@ body.filters-open .back-to-top, .back-to-top[hidden] { display: none; }
   font-weight: 780;
 }
 .filter-option__count { color: var(--muted); }
+.filter-option input:focus-visible + .filter-option__content {
+  outline: 3px solid rgba(139, 184, 255, 0.75);
+  outline-offset: 3px;
+}
 .filter-option input:checked + .filter-option__content::before { content: "✓"; font-weight: 900; }
 .filter-option input:checked + .filter-option__content .filter-option__count { color: rgba(7,20,38,0.72); }
 

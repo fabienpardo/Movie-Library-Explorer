@@ -58,12 +58,9 @@ Nettoyage de maintenance : cache léger pour les compteurs de filtres, clarifica
 
 Le tri par défaut utilise désormais la colonne `Position` en ordre décroissant. Les options de tri incluent aussi `Position` croissante et décroissante. Le tri par année utilise `Release Date` quand la colonne est disponible, avec `Year` comme fallback.
 
-
-## v8.2
-
 - Libellés de tri simplifiés : ajout récent/ancien, durée courte/longue, sortie récente/ancienne.
+- La comparaison `Title` / `Original Title` est normalisée pour éviter les doublons liés aux différences de casse, accents ou ponctuation.
 
+## Note v8.3
 
-## v8.2
-
-- Normalise title/original-title comparison so cosmetic case/accent/punctuation differences do not duplicate the original title.
+Corrections de cohérence : tri `Year` homogène entre `Release Date` et `Year`, tri `Original Title` basé sur la valeur réelle plutôt que sur le libellé affiché, détection plus sûre de la colonne `Title`, focus clavier visible sur les options de filtre, style conservé au survol des genres sélectionnés, et versions de cache d’icônes alignées.
