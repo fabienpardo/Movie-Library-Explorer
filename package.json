@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "test": "npm run test:unit && npm run test:assets && npm run test:e2e",
+    "test:unit": "node tests/regression.test.js",
+    "test:assets": "node tests/static-assets.test.js",
+    "test:e2e": "node tests/e2e.browser.test.js"
+  }
+}

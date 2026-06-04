@@ -1,6 +1,8 @@
 const PUBLISHED_SHEET_ID = "2PACX-1vR0f-YQic-WwbzgTdFQroIy9T1P14usd5ysqySDfuM0Hi9JtMS8jKJ1DaJBJOQAgXvkWpgTXjiCMTdK";
 const GID = "70337195";
 const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${GID}&single=true&output=csv`;
+const TEST_FIXTURE_CSV_URL = "./tests/fixtures/apple-tv-movies-library-mdb.csv";
+const TEST_MISSING_CSV_URL = "./tests/fixtures/__missing_regression_fixture__.csv";
 const DESKTOP_QUERY = window.matchMedia("(min-width: 760px)");
 const SUPPORTS_INERT = "inert" in HTMLElement.prototype;
 const FOCUSABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])";
@@ -30,6 +32,12 @@ const categories = {
 const categoryKeys = Object.keys(categories);
 const searchableCategories = categoryKeys.filter(category => categories[category].searchId);
 const DEFAULT_MATCH_MODE = { genre: "all", actor: "all", director: "all" };
+const VIEW_MODE_VALUES = new Set(["cards", "list"]);
+const STORAGE_KEYS = {
+  viewMode: "movieExplorer.viewMode",
+  selection: "movieExplorer.selection"
+};
+let storageAvailabilityCache = null;
 
 const els = {};
 const state = {
@@ -39,9 +47,13 @@ const state = {
   warnings: [],
   search: "",
   sort: "position-desc",
+  viewMode: "cards",
   filterSearch: { actor: "", director: "" },
   matchMode: { ...DEFAULT_MATCH_MODE },
   selected: { genre: new Set(), actor: new Set(), director: new Set() },
+  selection: new Set(),
+  selectionPanelOpen: false,
+  selectionDetailId: "",
   activePanel: "genre",
   filtersOpen: false,
   lastFocus: null,
@@ -50,8 +62,78 @@ const state = {
 };
 
 function byId(id) { return document.getElementById(id); }
+function dataSourceUrl() {
+  const fixtureMode = window.MOVIE_EXPLORER_TEST_FIXTURE_MODE || new URLSearchParams(window.location.search).get("fixture");
+  if (fixtureMode === "1") return TEST_FIXTURE_CSV_URL;
+  if (fixtureMode === "missing") return TEST_MISSING_CSV_URL;
+  return SHEET_CSV_URL;
+}
+function storageAvailable() {
+  if (storageAvailabilityCache !== null) return storageAvailabilityCache;
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      storageAvailabilityCache = false;
+      return storageAvailabilityCache;
+    }
+
+    const probeKey = "movieExplorer.storageProbe";
+    window.localStorage.setItem(probeKey, "1");
+    window.localStorage.removeItem(probeKey);
+    storageAvailabilityCache = true;
+    return storageAvailabilityCache;
+  } catch {
+    storageAvailabilityCache = false;
+    return storageAvailabilityCache;
+  }
+}
+function resetStorageAvailabilityForTests() {
+  storageAvailabilityCache = null;
+}
+function readStoredValue(key) {
+  if (!storageAvailable()) return null;
+  try { return window.localStorage.getItem(key); }
+  catch { return null; }
+}
+function writeStoredValue(key, value) {
+  if (!storageAvailable()) return;
+  try { window.localStorage.setItem(key, value); }
+  catch {}
+}
+function removeStoredValue(key) {
+  if (!storageAvailable()) return;
+  try { window.localStorage.removeItem(key); }
+  catch {}
+}
+function loadPersistentState() {
+  const viewMode = readStoredValue(STORAGE_KEYS.viewMode);
+  if (VIEW_MODE_VALUES.has(viewMode)) state.viewMode = viewMode;
+
+  try {
+    const selection = JSON.parse(readStoredValue(STORAGE_KEYS.selection) || "[]");
+    if (Array.isArray(selection)) state.selection = new Set(selection.filter(Boolean));
+  } catch {
+    state.selection = new Set();
+  }
+}
+function persistViewSettings() {
+  writeStoredValue(STORAGE_KEYS.viewMode, state.viewMode);
+}
+function persistSelection() {
+  if (state.selection.size) writeStoredValue(STORAGE_KEYS.selection, JSON.stringify([...state.selection]));
+  else removeStoredValue(STORAGE_KEYS.selection);
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+}
+function toSafeDomId(value, prefix = "id") {
+  const safe = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return `${prefix}-${safe || "item"}`;
 }
 function normalize(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -102,9 +184,10 @@ function formatRuntime(minutes) {
 
 function cacheEls() {
   [
-    "status", "diagnostics", "movieGrid", "activeFilters", "filterPanel", "filterBackdrop",
+    "status", "diagnostics", "resultSummary", "movieGrid", "activeFilters", "selectionPanel", "filterPanel", "filterBackdrop",
     "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
-    "searchInput", "sortSelect", "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode"
+    "searchInput", "sortSelect", "viewModeSelect", "toggleSelectionPanel", "selectionCount",
+    "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode"
   ].forEach(id => { els[id] = byId(id); });
 
   for (const cfg of Object.values(categories)) {
@@ -165,6 +248,11 @@ function detectColumns(labels) {
   };
 
   const title = pick(columnAliases.title, columnAliases.originalTitle);
+  const url = pick(columnAliases.url);
+  const warnings = [];
+  if (!title) warnings.push(`La colonne de titre n’a pas été détectée. Utilisation de la première colonne : "${labels[0]}".`);
+  if (!url) warnings.push("Aucune colonne URL/IMDb n’a été détectée. La sélection temporaire reste disponible, mais sa persistance utilise un identifiant de secours moins stable basé sur le titre, l’année et la position.");
+
   return {
     columns: {
       title: title || labels[0],
@@ -175,19 +263,79 @@ function detectColumns(labels) {
       releaseDate: pick(columnAliases.releaseDate),
       position: pick(columnAliases.position),
       imdbRating: pick(columnAliases.imdbRating),
-      url: pick(columnAliases.url),
+      url,
       country: pick(columnAliases.country),
       actors: pick(columnAliases.actors),
       directors: pick(columnAliases.directors)
     },
-    warnings: title ? [] : [`La colonne de titre n’a pas été détectée. Utilisation de la première colonne : "${labels[0]}".`]
+    warnings
   };
 }
 
-function cell(row, field) {
-  const column = state.columns[field];
+function rawCell(row, field, columns = state.columns) {
+  const column = columns[field];
   return column ? row[column] ?? "" : "";
 }
+function cell(row, field) { return rawCell(row, field); }
+function normalizedMovieUrlId(row, columns = state.columns) {
+  const rawUrl = String(rawCell(row, "url", columns) || "").trim();
+  if (!rawUrl) return "";
+
+  try {
+    const url = new URL(rawUrl);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+function fallbackMovieId(row, index = 0, columns = state.columns) {
+  // Fallback IDs are intentionally documented as less stable: spreadsheet title/year/position edits can orphan persisted selections.
+  const title = normalize([rawCell(row, "title", columns), rawCell(row, "originalTitle", columns)].filter(Boolean).join(" "));
+  const release = parseDateValue(rawCell(row, "releaseDate", columns));
+  const year = Number.isFinite(release) ? new Date(release).getUTCFullYear() : parseNumber(rawCell(row, "year", columns));
+  const position = parseNumber(rawCell(row, "position", columns));
+  return `fallback:${title || "untitled"}:${Number.isFinite(year) ? year : "unknown"}:${Number.isFinite(position) ? position : index}`;
+}
+function legacyMovieIds(row, index = 0, columns = state.columns) {
+  const url = normalizedMovieUrlId(row, columns);
+  const title = normalize([rawCell(row, "title", columns), rawCell(row, "originalTitle", columns)].filter(Boolean).join(" "));
+  const release = parseDateValue(rawCell(row, "releaseDate", columns));
+  const year = Number.isFinite(release) ? new Date(release).getUTCFullYear() : parseNumber(rawCell(row, "year", columns));
+  const position = parseNumber(rawCell(row, "position", columns));
+  return [
+    url,
+    `movie:${title || "untitled"}:${Number.isFinite(year) ? year : "unknown"}:${Number.isFinite(position) ? position : index}`
+  ].filter(Boolean);
+}
+function makeMovieId(row, index = 0, columns = state.columns) {
+  const url = normalizedMovieUrlId(row, columns);
+  return url ? `url:${url}` : fallbackMovieId(row, index, columns);
+}
+function reconcilePersistedSelection(rows = state.rows, columns = state.columns) {
+  if (!state.selection.size) return;
+
+  const aliases = new Map();
+  rows.forEach((row, index) => {
+    const nextId = makeMovieId(row, index, columns);
+    legacyMovieIds(row, index, columns).forEach(oldId => aliases.set(oldId, nextId));
+  });
+
+  let changed = false;
+  const reconciled = new Set();
+  for (const id of state.selection) {
+    const nextId = aliases.get(id) || id;
+    if (nextId !== id) changed = true;
+    reconciled.add(nextId);
+  }
+  if (changed) {
+    state.selection = reconciled;
+    persistSelection();
+  }
+}
+function movieId(row) {
+  return row.__movieExplorerId || makeMovieId(row, Math.max(0, state.rows.indexOf(row)));
+}
+function isMovieSelected(row) { return state.selection.has(movieId(row)); }
 function listFor(row, category) { return parseList(cell(row, categories[category].column)); }
 function displayTitle(row) { return cell(row, "title") || cell(row, "originalTitle") || "Sans titre"; }
 function equivalentTitle(value) { return normalize(value); }
@@ -244,6 +392,8 @@ function resetFilters() {
 }
 function syncControls() {
   els.searchInput.value = state.search;
+  els.sortSelect.value = state.sort;
+  els.viewModeSelect.value = state.viewMode;
   for (const category of categoryKeys) {
     byId(`${category}MatchMode`).value = state.matchMode[category];
     const searchId = categories[category].searchId;
@@ -256,14 +406,18 @@ function resetAfterLoadFailure() {
   syncControls();
   renderActiveFilters();
   renderFilterLists();
+  renderResultSummary([]);
+  renderSelectionPanel();
+  syncSelectionCount();
   els.diagnostics.hidden = true;
 }
 
 async function loadSheet() {
   showLoading();
+  const sourceUrl = dataSourceUrl();
 
   try {
-    const response = await fetch(SHEET_CSV_URL, { cache: "no-store" });
+    const response = await fetch(sourceUrl, { cache: "no-store" });
     if (!response.ok) throw new Error(`Impossible de charger le point d’accès CSV. HTTP ${response.status}.`);
 
     const text = await response.text();
@@ -271,29 +425,37 @@ async function loadSheet() {
 
     const { labels, rows } = csvToTable(text);
     const detected = detectColumns(labels);
+    const usableRows = rows
+      .filter(row => Object.values(row).some(value => String(value || "").trim()))
+      .map((row, index) => ({ ...row, __movieExplorerId: makeMovieId(row, index, detected.columns) }));
     Object.assign(state, {
       labels,
-      rows: rows.filter(row => Object.values(row).some(value => String(value || "").trim())),
+      rows: usableRows,
       columns: detected.columns,
       warnings: detected.warnings
     });
+    reconcilePersistedSelection(usableRows, detected.columns);
 
     renderDiagnostics();
     render();
   } catch (error) {
     resetAfterLoadFailure();
-    showError(`${error.message}\n\nSource: ${SHEET_CSV_URL}`);
+    showError(`${error.message}\n\nSource: ${sourceUrl || dataSourceUrl()}`);
   }
 }
 
 function showLoading() {
+  els.status.hidden = false;
   els.status.textContent = "Chargement de la bibliothèque…";
+  els.resultSummary.hidden = true;
   els.diagnostics.hidden = true;
   els.movieGrid.innerHTML = "";
   categoryKeys.forEach(category => { els[categories[category].listId].textContent = "Chargement…"; });
 }
 function showError(message) {
+  els.status.hidden = false;
   els.status.innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
+  els.resultSummary.hidden = true;
   els.movieGrid.innerHTML = "";
   categoryKeys.forEach(category => { els[categories[category].listId].textContent = "Aucune donnée chargée"; });
 }
@@ -466,50 +628,138 @@ function compare(a, b, sign) {
   return left.localeCompare(right) * sign;
 }
 
+function sortLabel() {
+  const option = els.sortSelect?.selectedOptions?.[0];
+  return option ? option.textContent.trim() : state.sort;
+}
+function pluralize(count, singular, plural = `${singular}s`) { return `${count} ${count > 1 ? plural : singular}`; }
+function renderResultSummary(rows) {
+  if (!els.resultSummary) return;
+  if (!state.rows.length) {
+    els.resultSummary.hidden = true;
+    els.resultSummary.textContent = "";
+    return;
+  }
+
+  const filters = activeCount();
+  const selection = state.selection.size;
+  els.resultSummary.hidden = false;
+  els.resultSummary.innerHTML = [
+    `<strong>${rows.length}</strong> / ${state.rows.length} films affichés`,
+    `Tri : ${escapeHtml(sortLabel())}`,
+    pluralize(filters, "filtre actif", "filtres actifs"),
+    pluralize(selection, "film sélectionné", "films sélectionnés")
+  ].map(item => `<span>${item}</span>`).join("");
+}
+function effectiveViewMode() {
+  return DESKTOP_QUERY.matches ? state.viewMode : "cards";
+}
+function syncDisplaySettings() {
+  const mode = effectiveViewMode();
+  els.movieGrid.dataset.viewMode = mode;
+  document.documentElement.dataset.viewMode = mode;
+}
 function render() {
   clearOptionCountsCache();
   const rows = sortRows(filteredRows());
-  const totalRuntime = rows.reduce((sum, row) => {
-    const runtime = parseRuntime(cell(row, "runtime"));
-    return Number.isFinite(runtime) ? sum + runtime : sum;
-  }, 0);
+  const mode = effectiveViewMode();
 
-  els.status.innerHTML = `<span><strong>${rows.length}</strong> / ${state.rows.length} films</span><span><strong>${escapeHtml(formatRuntime(totalRuntime))}</strong> durée totale</span>`;
+  els.status.hidden = true;
+  syncDisplaySettings();
+  renderResultSummary(rows);
   renderActiveFilters();
   renderFilterLists();
-  els.movieGrid.innerHTML = rows.length ? rows.map(renderMovieCard).join("") : `<div class="empty">Aucun film ne correspond aux filtres actuels.</div>`;
+  syncSelectionCount();
+  renderSelectionPanel();
+  els.movieGrid.innerHTML = rows.length
+    ? rows.map(mode === "list" ? renderMovieListItem : renderMovieCard).join("")
+    : `<div class="empty">Aucun film ne correspond aux filtres actuels.</div>`;
   requestAnimationFrame(syncBackToTop);
 }
-function renderMovieCard(row) {
-  const rating = cell(row, "imdbRating");
-  const runtime = parseRuntime(cell(row, "runtime"));
-  const year = cell(row, "year");
-  const country = mainCountry(cell(row, "country"));
-  const genres = listFor(row, "genre");
-  const actors = listFor(row, "actor");
-  const directors = listFor(row, "director");
+function movieViewModel(row) {
   const title = displayTitle(row);
-  const originalTitle = displayOriginalTitle(row);
-  const url = movieUrl(row);
-  const titleContent = escapeHtml(title);
-
+  return {
+    row,
+    id: movieId(row),
+    title,
+    titleHtml: escapeHtml(title),
+    originalTitle: displayOriginalTitle(row),
+    url: movieUrl(row),
+    rating: cell(row, "imdbRating"),
+    runtime: parseRuntime(cell(row, "runtime")),
+    year: cell(row, "year"),
+    country: mainCountry(cell(row, "country")),
+    genres: listFor(row, "genre"),
+    actors: listFor(row, "actor"),
+    directors: listFor(row, "director")
+  };
+}
+function renderMovieTitle(model) {
+  const title = model.url
+    ? `<a class="movie-title-link" href="${escapeHtml(model.url)}" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir ${model.titleHtml} sur IMDb">${model.titleHtml}</a>`
+    : model.titleHtml;
   return `
-    <article class="movie-card">
+    <h2>${title}</h2>
+    ${model.originalTitle ? `<p class="original-title">${escapeHtml(model.originalTitle)}</p>` : ""}`;
+}
+function renderMetaBadges(model) {
+  return `
+    ${model.rating ? `<span class="meta-badge meta-badge--rating ${ratingClass(model.rating)}">IMDb ${escapeHtml(model.rating)}</span>` : ""}
+    <span class="meta-badge">${escapeHtml(formatRuntime(model.runtime))}</span>
+    ${model.year ? `<span class="meta-badge">${escapeHtml(model.year)}</span>` : ""}
+    ${model.country ? `<span class="meta-badge">${escapeHtml(model.country)}</span>` : ""}`;
+}
+function renderGenreChips(model) {
+  return model.genres.map(genre => renderCardFilterButton("genre", genre, "genre-chip", "genre-chip--selected")).join("");
+}
+function renderDirectorCredit(model, className = "") {
+  return model.directors.length
+    ? `<p${className ? ` class="${className}"` : ""}><strong>Réalisation :</strong> ${highlightList(model.directors, state.selected.director)}</p>`
+    : "";
+}
+function renderActorCredit(model) {
+  return model.actors.length
+    ? `<p class="actors-line"><strong>Acteurs :</strong> ${highlightList(model.actors, state.selected.actor)}</p>`
+    : "";
+}
+function renderSelectionButton(rowOrModel) {
+  const id = rowOrModel.id || movieId(rowOrModel);
+  const selected = state.selection.has(id);
+  const label = selected ? "Retirer de la sélection" : "Ajouter à la sélection";
+  const symbol = selected ? "✓" : "+";
+  return `<button class="selection-toggle${selected ? " is-selected" : ""}" type="button" data-selection-id="${escapeHtml(id)}" aria-pressed="${selected}" aria-label="${label}" title="${label}"><span aria-hidden="true">${symbol}</span></button>`;
+}
+function renderMovieCard(row) {
+  const model = movieViewModel(row);
+  return `
+    <article class="movie-card" data-movie-id="${escapeHtml(model.id)}">
       <header class="movie-card__header">
-        <h2>${url ? `<a class="movie-title-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir ${titleContent} sur IMDb">${titleContent}</a>` : titleContent}</h2>
-        ${originalTitle ? `<p class="original-title">${escapeHtml(originalTitle)}</p>` : ""}
+        <div class="movie-card__title-block">${renderMovieTitle(model)}</div>
+        ${renderSelectionButton(model)}
       </header>
-      <div class="badge-row">
-        ${rating ? `<span class="meta-badge meta-badge--rating ${ratingClass(rating)}">IMDb ${escapeHtml(rating)}</span>` : ""}
-        <span class="meta-badge">${escapeHtml(formatRuntime(runtime))}</span>
-        ${year ? `<span class="meta-badge">${escapeHtml(year)}</span>` : ""}
-        ${country ? `<span class="meta-badge">${escapeHtml(country)}</span>` : ""}
-      </div>
+      <div class="badge-row">${renderMetaBadges(model)}</div>
       <div class="credits">
-        ${directors.length ? `<p><strong>Réalisation :</strong> ${highlightList(directors, state.selected.director)}</p>` : ""}
-        ${actors.length ? `<p class="actors-line"><strong>Acteurs :</strong> ${highlightList(actors, state.selected.actor)}</p>` : ""}
+        ${renderDirectorCredit(model)}
+        ${renderActorCredit(model)}
       </div>
-      <div class="chips">${genres.map(genre => renderCardFilterButton("genre", genre, "genre-chip", "genre-chip--selected")).join("")}</div>
+      <div class="chips">${renderGenreChips(model)}</div>
+    </article>`;
+}
+function renderMovieListItem(row) {
+  const model = movieViewModel(row);
+  return `
+    <article class="movie-card movie-card--list" data-movie-id="${escapeHtml(model.id)}">
+      <div class="movie-list-top">
+        <div class="movie-list-main">
+          ${renderMovieTitle(model)}
+          ${renderDirectorCredit(model, "movie-list-credit")}
+        </div>
+        <div class="movie-list-action">${renderSelectionButton(model)}</div>
+      </div>
+      <div class="movie-list-bottom">
+        <div class="movie-list-meta badge-row">${renderMetaBadges(model)}</div>
+        <div class="movie-list-genres chips">${renderGenreChips(model)}</div>
+      </div>
     </article>`;
 }
 function ratingClass(value) {
@@ -529,6 +779,86 @@ function renderCardFilterButton(category, value, baseClass, selectedClass) {
   return `<button class="${classes}" type="button" data-card-filter-category="${category}" data-card-filter-value="${encodeFilterValue(value)}" aria-pressed="${selected}" aria-label="${escapeHtml(filterToggleLabel(category, value))}">${escapeHtml(value)}</button>`;
 }
 
+function selectedRows() {
+  const selectedIds = state.selection;
+  return state.rows.filter(row => selectedIds.has(movieId(row)));
+}
+function syncSelectionCount() {
+  els.selectionCount.textContent = String(state.selection.size);
+  els.selectionCount.hidden = state.selection.size === 0;
+  els.toggleSelectionPanel.setAttribute("aria-expanded", String(state.selectionPanelOpen));
+}
+function toggleMovieSelectionById(id) {
+  if (!id) return;
+  if (state.selection.has(id)) {
+    state.selection.delete(id);
+    if (state.selectionDetailId === id) state.selectionDetailId = "";
+  } else {
+    state.selection.add(id);
+  }
+  persistSelection();
+  render();
+}
+function clearSelection() {
+  state.selection.clear();
+  state.selectionDetailId = "";
+  persistSelection();
+  render();
+}
+function toggleSelectionDetail(id) {
+  if (!id) return;
+  state.selectionDetailId = state.selectionDetailId === id ? "" : id;
+  renderSelectionPanel();
+}
+function toggleSelectionPanel() {
+  state.selectionPanelOpen = !state.selectionPanelOpen;
+  renderSelectionPanel();
+  syncSelectionCount();
+}
+function renderSelectionPanel() {
+  if (!els.selectionPanel) return;
+  els.selectionPanel.hidden = !state.selectionPanelOpen;
+  if (!state.selectionPanelOpen) return;
+
+  const rows = selectedRows();
+  // Detail expansion is tied to selected rows, not the filtered result grid, so users can keep reviewing a shortlist while exploring other filters.
+  const detailIsValid = rows.some(row => movieId(row) === state.selectionDetailId);
+  if (!detailIsValid) state.selectionDetailId = "";
+
+  els.selectionPanel.innerHTML = `
+    <div class="selection-panel__header">
+      <div>
+        <p class="eyebrow">Exploration</p>
+        <h2 id="selectionPanelHeading">Sélection temporaire</h2>
+        <p>${pluralize(state.selection.size, "film sélectionné", "films sélectionnés")}</p>
+      </div>
+      <button class="secondary-button selection-clear-button" type="button" data-selection-action="clear" ${state.selection.size ? "" : "disabled"}>Vider</button>
+    </div>
+    ${rows.length ? `
+      <div class="selection-list">
+        ${rows.map(row => {
+          const id = movieId(row);
+          const expanded = state.selectionDetailId === id;
+          const detailId = toSafeDomId(id, "selection-detail");
+          const meta = [cell(row, "year"), mainCountry(cell(row, "country")), formatRuntime(parseRuntime(cell(row, "runtime")))].filter(Boolean).map(escapeHtml).join(" · ");
+          return `
+            <article class="selection-item${expanded ? " is-expanded" : ""}">
+              <button class="selection-item__summary" type="button" data-selection-detail-id="${escapeHtml(id)}" aria-expanded="${expanded}" aria-controls="${detailId}">
+                <span class="selection-item__text">
+                  <span class="selection-item__title">${escapeHtml(displayTitle(row))}</span>
+                  <span class="selection-item__meta">${meta}</span>
+                </span>
+                <span class="selection-item__hint">${expanded ? "Masquer" : "Détails"}</span>
+              </button>
+              <button class="filter-remove" type="button" data-selection-remove-id="${escapeHtml(id)}" aria-label="Retirer ${escapeHtml(displayTitle(row))} de la sélection">×</button>
+            </article>
+            ${expanded ? `<div id="${detailId}" class="selection-detail">${renderMovieCard(row)}</div>` : ""}`;
+        }).join("")}
+      </div>` : `<p class="selection-empty">Aucun film sélectionné.</p>`}
+  `;
+}
+
+
 function activeFilters() {
   return [
     ...(state.search ? [{ group: "Recherche", category: "search", value: state.search }] : []),
@@ -536,10 +866,10 @@ function activeFilters() {
   ];
 }
 function renderActiveFilters() {
-  els.activeFilters.innerHTML = activeFilters().map((item, index) => `
+  els.activeFilters.innerHTML = activeFilters().map(item => `
     <span class="active-filter-chip">
       <span>${escapeHtml(item.group)}: ${escapeHtml(item.value)}</span>
-      <button class="filter-remove" type="button" data-filter-index="${index}" aria-label="Retirer le filtre ${escapeHtml(item.group)}">×</button>
+      <button class="filter-remove" type="button" data-filter-category="${escapeHtml(item.category)}" data-filter-value="${encodeFilterValue(item.value)}" aria-label="Retirer le filtre ${escapeHtml(item.group)}">×</button>
     </span>`).join("");
 }
 function activeCount() { return activeFilters().length; }
@@ -611,7 +941,8 @@ function handleFilterViewportChange() {
     document.body.classList.remove("filters-open");
   }
   syncFilterA11y();
-  syncBackToTop();
+  if (state.rows.length) render();
+  else syncBackToTop();
 }
 
 function syncDynamicFocusableFallback() {
@@ -675,8 +1006,10 @@ function removeFilter(category, value) {
   if (category === "search") {
     state.search = "";
     els.searchInput.value = "";
-  } else {
+  } else if (state.selected[category]) {
     state.selected[category].delete(value);
+  } else {
+    return;
   }
   render();
 }
@@ -684,6 +1017,12 @@ function removeFilter(category, value) {
 function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
+  els.viewModeSelect.addEventListener("change", event => {
+    state.viewMode = VIEW_MODE_VALUES.has(event.target.value) ? event.target.value : "cards";
+    persistViewSettings();
+    render();
+  });
+  els.toggleSelectionPanel.addEventListener("click", toggleSelectionPanel);
   categoryKeys.forEach(category => byId(`${category}MatchMode`).addEventListener("change", event => { state.matchMode[category] = event.target.value; render(); }));
 
   searchableCategories.forEach(category => {
@@ -705,6 +1044,12 @@ function bindEvents() {
   });
 
   els.movieGrid.addEventListener("click", event => {
+    const selectionButton = event.target.closest("button[data-selection-id]");
+    if (selectionButton) {
+      toggleMovieSelectionById(selectionButton.dataset.selectionId);
+      return;
+    }
+
     const button = event.target.closest("button[data-card-filter-category]");
     if (!button) return;
     toggleFilterSelection(button.dataset.cardFilterCategory, decodeFilterValue(button.dataset.cardFilterValue));
@@ -720,10 +1065,36 @@ function bindEvents() {
   window.addEventListener("scroll", syncBackToTop, { passive: true });
 
   els.activeFilters.addEventListener("click", event => {
-    const button = event.target.closest("button[data-filter-index]");
+    const button = event.target.closest("button[data-filter-category]");
     if (!button) return;
-    const item = activeFilters()[Number(button.dataset.filterIndex)];
-    if (item) removeFilter(item.category, item.value);
+    removeFilter(button.dataset.filterCategory, decodeFilterValue(button.dataset.filterValue));
+  });
+  els.selectionPanel.addEventListener("click", event => {
+    const selectionButton = event.target.closest("button[data-selection-id]");
+    if (selectionButton) {
+      toggleMovieSelectionById(selectionButton.dataset.selectionId);
+      return;
+    }
+
+    const filterButton = event.target.closest("button[data-card-filter-category]");
+    if (filterButton) {
+      toggleFilterSelection(filterButton.dataset.cardFilterCategory, decodeFilterValue(filterButton.dataset.cardFilterValue));
+      return;
+    }
+
+    const removeButton = event.target.closest("button[data-selection-remove-id]");
+    if (removeButton) {
+      toggleMovieSelectionById(removeButton.dataset.selectionRemoveId);
+      return;
+    }
+
+    const detailButton = event.target.closest("button[data-selection-detail-id]");
+    if (detailButton) {
+      toggleSelectionDetail(detailButton.dataset.selectionDetailId);
+      return;
+    }
+
+    if (event.target.closest("button[data-selection-action='clear']")) clearSelection();
   });
   document.querySelectorAll("[data-filter-category]").forEach(button => button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory)));
   document.addEventListener("keydown", event => {
@@ -735,9 +1106,78 @@ function bindEvents() {
   else DESKTOP_QUERY.addListener(handleFilterViewportChange);
 }
 
-cacheEls();
-bindEvents();
-setActivePanel(state.activePanel);
-syncFilterA11y();
-syncBackToTop();
-loadSheet();
+function initApp() {
+  cacheEls();
+  loadPersistentState();
+  syncControls();
+  bindEvents();
+  setActivePanel(state.activePanel);
+  syncFilterA11y();
+  syncDisplaySettings();
+  syncSelectionCount();
+  syncBackToTop();
+  loadSheet();
+}
+
+if (typeof window !== "undefined") {
+  window.__MovieExplorerTestHooks = {
+    activeCount,
+    activeFilters,
+    baseOptionCounts,
+    categories,
+    cell,
+    clearFilters,
+    clearSelection,
+    columnAliases,
+    compare,
+    csvToTable,
+    dataSourceUrl,
+    detectColumns,
+    displayOriginalTitle,
+    displayTitle,
+    effectiveViewMode,
+    equivalentTitle,
+    isMovieSelected,
+    loadPersistentState,
+    makeMovieId,
+    fallbackMovieId,
+    legacyMovieIds,
+    movieId,
+    filteredRows,
+    formatRuntime,
+    listFor,
+    loadSheet,
+    mainCountry,
+    matchesFilters,
+    matchesList,
+    movieUrl,
+    normalize,
+    normalizeSortText,
+    optionCounts,
+    parseCsv,
+    parseDateValue,
+    parseList,
+    parseNumber,
+    parseRuntime,
+    ratingClass,
+    renderCardFilterButton,
+    renderResultSummary,
+    reconcilePersistedSelection,
+    resetStorageAvailabilityForTests,
+    resetAfterLoadFailure,
+    selectedRows,
+    syncDisplaySettings,
+    syncSelectionCount,
+    toggleMovieSelectionById,
+    toggleSelectionDetail,
+    toSafeDomId,
+    sortRows,
+    sortValue,
+    sortableTitle,
+    state,
+    stripLeadingArticle,
+    stripSortEdgePunctuation
+  };
+
+  if (!window.MOVIE_EXPLORER_SKIP_AUTO_INIT) initApp();
+}

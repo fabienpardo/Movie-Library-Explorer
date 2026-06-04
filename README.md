@@ -11,6 +11,9 @@ Application statique GitHub Pages pour explorer une bibliothèque de films publi
 - Couleurs IMDb : vert pour `8.0+`, jaune pour `7.0–7.9`, rouge sous `7.0`.
 - Titre du film cliquable vers IMDb quand une colonne URL est disponible.
 - Panneau de filtres mobile et barre latérale desktop.
+- Résumé de résultats sticky pendant l’exploration.
+- Mode cartes/liste sur desktop ; sur mobile, l’affichage reste en cartes.
+- Sélection temporaire persistée localement, avec bouton `+` compact sur les cartes et détails complets consultables dans le panneau de sélection.
 - Icônes favicon, iOS et manifeste incluses.
 
 ## Lancer en local
@@ -64,3 +67,48 @@ Le tri par défaut utilise désormais la colonne `Position` en ordre décroissan
 ## Note v8.3
 
 Corrections de cohérence : tri `Year` homogène entre `Release Date` et `Year`, tri `Original Title` basé sur la valeur réelle plutôt que sur le libellé affiché, détection plus sûre de la colonne `Title`, focus clavier visible sur les options de filtre, style conservé au survol des genres sélectionnés, et versions de cache d’icônes alignées.
+
+## Note v8.4
+
+Roadmap d’exploration : hero compact, retrait des anciennes cartes statistiques, résumé sticky des résultats, mode cartes/liste, et sélection temporaire persistée via `localStorage`.
+
+## Note v8.4.1
+
+Nettoyage de maintenance : versions de cache alignées, retrait des sélecteurs CSS obsolètes, suppression des règles mobiles inutiles pour l’ancien mode liste, factorisation du rendu des cartes/listes, et séparation des utilitaires de test navigateur.
+
+
+## Note v8.4.2
+
+Nettoyage de robustesse : retrait de la suppression de filtres basée sur un index DOM, identifiants DOM normalisés pour les détails de sélection, test réel d’écriture `localStorage`, avertissement quand la colonne URL/IMDb est absente, documentation de l’identifiant de secours des films et migration des anciens identifiants persistés.
+
+Les sélections sont les plus stables quand le CSV contient une colonne URL/IMDb. Sans cette colonne, l’application utilise un identifiant de secours basé sur le titre, l’année et la position ; une modification de ces valeurs dans la feuille peut rendre une ancienne sélection persistée impossible à retrouver.
+
+## Tests de régression
+
+Le package inclut un fichier CSV de test dans `tests/fixtures/apple-tv-movies-library-mdb.csv`. Ce fichier est destiné uniquement aux tests : l’application continue de charger les données depuis l’URL Google Sheets publiée par défaut.
+
+Lancer tous les scénarios depuis la racine du package :
+
+```bash
+npm test
+```
+
+Lancer une couche précise :
+
+```bash
+npm run test:unit
+npm run test:assets
+npm run test:e2e
+```
+
+Les tests sont organisés en trois couches :
+
+- `tests/regression.test.js` : logique de données, parsing CSV, détection des colonnes, tris, filtres, durées, classes IMDb et URLs IMDb.
+- `tests/static-assets.test.js` : cohérence des fichiers référencés par `index.html`, le manifeste, les versions de cache et les hooks CSS de la roadmap.
+- `tests/e2e.browser.test.js` : scénarios navigateur avec Chromium, sans dépendance externe. Les helpers CDP sont isolés dans `tests/browser-test-utils.js`. Les scénarios couvrent le rendu, la recherche, les filtres, les chips cliquables, les tris, le résumé sticky, l’affichage liste desktop, le mode cartes forcé sur mobile, la sélection temporaire, l’erreur de chargement et les comportements mobiles critiques.
+
+Pour les tests navigateur, Chromium doit être disponible. Si nécessaire :
+
+```bash
+CHROMIUM_PATH=/path/to/chromium npm run test:e2e
+```

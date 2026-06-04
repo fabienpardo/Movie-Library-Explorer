@@ -9,22 +9,18 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Films" />
   <title>Explorateur de films</title>
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=8.3" />
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png?v=8.3" />
-  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=8.3" />
-  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=8.3" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=8.4.2" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png?v=8.4.2" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=8.4.2" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=8.4.2" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <!-- Bump CSS/JS query strings together when deploying. -->
-  <link rel="stylesheet" href="style.css?v=8.3" />
+  <link rel="stylesheet" href="style.css?v=8.4.2" />
 </head>
 <body>
   <header class="app-header">
     <div class="app-header__inner">
-      <div>
-        <p class="eyebrow">Bibliothèque de films</p>
-        <h1>Explorateur</h1>
-      </div>
-      <p class="app-subtitle">Filtrer, trier, explorer.</p>
+      <h1>Explorateur de films</h1>
     </div>
   </header>
 
@@ -134,20 +130,33 @@
           <option value="country-asc">Pays A → Z</option>
         </select>
 
+        <label class="visually-hidden" for="viewModeSelect">Mode d’affichage</label>
+        <select id="viewModeSelect">
+          <option value="cards" selected>Cartes</option>
+          <option value="list">Liste</option>
+        </select>
+
+
+        <button id="toggleSelectionPanel" class="secondary-button selection-toolbar-button" type="button" aria-expanded="false" aria-controls="selectionPanel">
+          Sélection <span id="selectionCount" class="button-badge">0</span>
+        </button>
+
         <button id="openFilters" class="primary-button mobile-filter-button" type="button">
           Filtres <span id="filterCount" class="button-badge">0</span>
         </button>
       </div>
 
-      <div id="status" class="summary-card">Chargement de la bibliothèque…</div>
+      <div id="status" class="status-message">Chargement de la bibliothèque…</div>
       <div id="diagnostics" class="diagnostics" hidden></div>
+      <div id="resultSummary" class="result-summary" hidden></div>
       <div id="activeFilters" class="active-filters"></div>
-      <div id="movieGrid" class="movie-grid"></div>
+      <section id="selectionPanel" class="selection-panel" aria-labelledby="selectionPanelHeading" hidden></section>
+      <div id="movieGrid" class="movie-grid" data-view-mode="cards"></div>
     </section>
   </main>
 
   <button id="backToTop" class="back-to-top" type="button" aria-label="Revenir en haut de la page" hidden>↑</button>
 
-  <script src="script.js?v=8.3"></script>
+  <script src="script.js?v=8.4.2"></script>
 </body>
 </html>
