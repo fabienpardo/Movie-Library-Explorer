@@ -64,9 +64,8 @@ Title sorting normalizes leading articles, punctuation, accents, and case. For r
 
 ### Movie cards and list view
 
-- Card view on all devices.
-- Desktop-only list view for denser scanning.
-- Mobile always uses card view; the list/card selector is hidden on small screens.
+- The layout is chosen automatically by viewport, with no user-facing toggle: desktop (≥ 760px) uses the denser list view, and mobile uses card view.
+- The layout switches live when the viewport crosses the breakpoint.
 - IMDb rating visual classes:
   - high: `8.0+`;
   - medium: `7.0–7.9`;
@@ -183,7 +182,7 @@ Column detection is alias-based. If a sheet uses a different header name, update
 
 ### Poster-column note
 
-Poster images are optional. When a poster/image-link column is detected, cards render the image with lazy loading. Accepted values are `http://`, `https://`, or safe `data:image/...;base64` URLs. Broken image URLs are removed from the rendered card so one bad poster does not block the library.
+Poster images are optional. When a poster/image-link column is detected, cards render the image with lazy loading and a loading skeleton. Accepted values are `http://`, `https://`, or safe `data:image/...;base64` URLs. A broken image URL falls back to a gradient tile showing the title's initials, so one bad poster does not block the library. Poster load/error outcomes are remembered for the session so re-rendered cards (after filtering, sorting, or searching) do not re-show the skeleton or retry a known-broken image.
 
 ### Important URL-column note
 
@@ -314,7 +313,7 @@ When deploying a version that changes CSS, JavaScript, icons, or manifest refere
 Current version:
 
 ```text
-8.4.2
+8.6.1
 ```
 
 The static test suite verifies that cache-busting versions stay aligned.
@@ -324,13 +323,12 @@ The static test suite verifies that cache-busting versions stay aligned.
 ### Desktop
 
 - Filter panel is available as a sidebar.
-- Display mode selector allows `Cartes` or `Liste`.
+- The denser list view is used automatically (no display-mode control).
 - Sticky result summary remains visible during exploration.
 
 ### Mobile
 
-- The app always renders cards.
-- The card/list selector is hidden.
+- The app always renders cards automatically.
 - Filters open in a dialog-style panel.
 - The panel can be closed through the close button, backdrop behavior, or `Escape` in browser tests.
 - Selection button is compact and positioned at the top-right of cards.
@@ -339,10 +337,9 @@ The static test suite verifies that cache-busting versions stay aligned.
 
 The app uses `localStorage` for:
 
-- selected display mode on desktop;
 - temporary movie selection.
 
-The storage guard performs a real write/remove probe. If `localStorage` is unavailable or blocked, the app still works, but persisted preferences and selections may not survive reloads.
+The layout is derived from the viewport and is not persisted. The storage guard performs a real write/remove probe. If `localStorage` is unavailable or blocked, the app still works, but the persisted selection may not survive reloads.
 
 No server-side persistence is used.
 
