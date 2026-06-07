@@ -254,6 +254,24 @@ test("missing URL columns emit a persistence-stability warning", () => {
   assert.ok(detected.warnings.some(message => message.includes("Aucune colonne URL/IMDb")));
 });
 
+test("search filtering matches across fields and memoizes per-row search text", () => {
+  const h = loadAppHooks();
+  const { labels, rows } = h.csvToTable(fs.readFileSync(fixturePath, "utf8"));
+  const { columns } = h.detectColumns(labels);
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+
+  h.state.search = "__no_such_movie_term__";
+  assert.equal(h.filteredRows().length, 0);
+
+  h.state.search = "matrix";
+  const matches = h.filteredRows().length;
+  assert.ok(matches > 0);
+  // Second pass exercises the cached __searchText and must return identical results.
+  assert.equal(h.filteredRows().length, matches);
+  assert.ok(preparedRows.every(row => typeof row.__searchText === "string"));
+});
+
 test("legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format", () => {
   const h = loadAppHooks();
   const labels = ["Title", "Year", "URL", "Position"];
