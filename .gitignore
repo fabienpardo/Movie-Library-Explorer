@@ -1,2 +1,5 @@
 .DS_Store
 .claude/
+coverage/
+.nyc_output/
+node_modules/

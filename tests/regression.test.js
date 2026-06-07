@@ -78,7 +78,7 @@ test("fixture CSV parses into the expected library rows", () => {
   const fixture = fs.readFileSync(fixturePath, "utf8");
   const { labels, rows } = h.csvToTable(fixture);
 
-  assert.equal(rows.length, 510);
+  assert.equal(rows.length, 511);
   assert.ok(labels.includes("Title"));
   assert.equal(rows[0].Title, "60 secondes chrono");
 });
@@ -91,7 +91,7 @@ test("uploaded fixture columns are detected by aliases", () => {
   assert.equal(detected.columns.title, "Title");
   assert.equal(detected.columns.originalTitle, "Original Title");
   assert.equal(detected.columns.url, "URL");
-  assert.equal(detected.columns.poster, "Poster URL");
+  assert.equal(detected.columns.poster, "Poster");
   assert.equal(detected.columns.imdbRating, "IMDb Rating");
   assert.equal(detected.columns.runtime, "Runtime (mins)");
   assert.equal(detected.columns.year, "Year");
@@ -199,7 +199,7 @@ test("runtime, rating and IMDb URL helpers handle fixture values", () => {
   assert.equal(h.ratingClass("7.1"), "meta-badge--rating-mid");
   assert.equal(h.ratingClass("6.5"), "meta-badge--rating-low");
   assert.equal(h.movieUrl(first), "https://www.imdb.com/title/tt0187078/");
-  assert.match(h.posterUrl(first), /^data:image\/png;base64,/);
+  assert.match(h.posterUrl(first), /^https:\/\//);
 });
 
 
@@ -295,6 +295,98 @@ test("safe DOM IDs are deterministic and do not need HTML escaping first", () =>
   const h = loadAppHooks();
 
   assert.equal(h.toSafeDomId('url:https://example.com/title/<tt1>&x="1"', 'selection-detail'), 'selection-detail-url-https-example-com-title-tt1-x-1');
+});
+
+test("search matches real cell values only and ignores the synthetic movie ID", () => {
+  const h = loadAppHooks();
+  const labels = ["Title", "URL", "Position"];
+  const { columns } = h.detectColumns(labels);
+  const rows = [
+    { Title: "Le Voyage", URL: "https://www.imdb.com/title/tt0187078/", Position: "1" },
+    { Title: "Mon Film", URL: "", Position: "2" }
+  ];
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+
+  // "fallback" only appears in the synthetic id of the URL-less row, never in a real cell.
+  h.state.search = "fallback";
+  assert.equal(h.filteredRows().length, 0);
+
+  // A term that lives only in the synthetic id prefix of the URL-backed row must not match either.
+  h.state.search = "url";
+  assert.equal(h.filteredRows().length, 0);
+
+  // Real values still match: the title and the URL cell.
+  h.state.search = "voyage";
+  assert.deepEqual(h.filteredRows().map(row => row.Title), ["Le Voyage"]);
+  h.state.search = "tt0187078";
+  assert.deepEqual(h.filteredRows().map(row => row.Title), ["Le Voyage"]);
+});
+
+test("escapeHtml neutralizes HTML metacharacters and is wired into rendered card markup", () => {
+  const h = loadAppHooks();
+
+  // The escaping primitive: every CSV-derived string passes through this before reaching innerHTML.
+  assert.equal(h.escapeHtml(`<script>alert("x")&'`), "&lt;script&gt;alert(&quot;x&quot;)&amp;&#039;");
+  assert.equal(h.escapeHtml(null), "");
+  assert.equal(h.escapeHtml(undefined), "");
+  assert.equal(h.escapeHtml(42), "42");
+
+  // Regression guard: a malicious value must not survive as live markup in actual rendered output.
+  resetState(h, ["Title", "Genres"], [], { title: "Title", genres: "Genres" });
+  const payload = `<img src=x onerror="alert(1)">`;
+  const html = h.renderCardFilterButton("genre", payload, "genre-chip", "genre-chip--selected");
+  assert.ok(!html.includes("<img src=x"), "raw HTML payload must not appear unescaped");
+  assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+});
+
+test("parseCsv handles quoted delimiters, escaped quotes, embedded newlines, CRLF and blank lines", () => {
+  const h = loadAppHooks();
+
+  // Rehydrate into test-realm arrays so deepEqual's prototype check passes across the vm boundary.
+  const rows = Array.from(h.parseCsv('a,"b,c","d""e"\r\n"multi\nline",f,g\r\n   \r\nx,y,z'), row => [...row]);
+  assert.equal(rows.length, 3, "all-whitespace lines are dropped");
+  assert.deepEqual(rows[0], ["a", "b,c", 'd"e']);
+  assert.deepEqual(rows[1], ["multi\nline", "f", "g"]);
+  assert.deepEqual(rows[2], ["x", "y", "z"]);
+
+  // parseCsv keeps a leading BOM verbatim; csvToTable is the layer that strips it from headers.
+  assert.equal(h.parseCsv("﻿Title,Year\nFilm,2020")[0][0], "﻿Title");
+  assert.equal(h.csvToTable("﻿Title,Year\nFilm,2020").labels[0], "Title");
+});
+
+test("parseRuntime and parseDateValue cover every supported input shape", () => {
+  const h = loadAppHooks();
+
+  assert.equal(h.parseRuntime("118"), 118);
+  assert.equal(h.parseRuntime("1h30"), 90);
+  assert.equal(h.parseRuntime("2h"), 120);
+  assert.equal(h.parseRuntime("2:05"), 125);
+  assert.equal(h.parseRuntime("95 min"), 95);
+  assert.equal(h.parseRuntime(140), 140);
+  assert.ok(Number.isNaN(h.parseRuntime("")));
+
+  assert.equal(h.parseDateValue("2020-03-15"), Date.UTC(2020, 2, 15));
+  assert.equal(h.parseDateValue("15/03/2020"), Date.UTC(2020, 2, 15));
+  assert.equal(h.parseDateValue("15.03.2020"), Date.UTC(2020, 2, 15));
+  assert.ok(Number.isNaN(h.parseDateValue("")));
+  assert.ok(Number.isNaN(h.parseDateValue("not a date")));
+});
+
+test("baseOptionCounts memoizes per input state and recomputes when filters change", () => {
+  const h = loadAppHooks();
+  const { labels, rows } = h.csvToTable(fs.readFileSync(fixturePath, "utf8"));
+  const { columns } = h.detectColumns(labels);
+  resetState(h, labels, rows, columns);
+
+  const first = h.baseOptionCounts("genre");
+  const second = h.baseOptionCounts("genre");
+  assert.strictEqual(second, first, "identical state should return the cached array reference");
+  assert.ok(h.state.optionCountsCache.size >= 1);
+
+  h.state.selected.genre.add("Action");
+  const third = h.baseOptionCounts("genre");
+  assert.notStrictEqual(third, first, "changing the selection must bust the cache key");
 });
 
 let passed = 0;

@@ -22,6 +22,12 @@ npm run test:assets
 npm run test:e2e
 ```
 
+Coverage (unit layer, via on-demand `c8` — no committed dependency):
+
+```bash
+npm run test:coverage   # prints a summary and writes coverage/index.html
+```
+
 Direct commands:
 
 ```bash
@@ -32,8 +38,8 @@ node tests/e2e.browser.test.js
 
 ## Requirements
 
-- Node.js.
-- Chromium for browser E2E tests.
+- Node.js. The unit and asset layers run on any maintained version.
+- The browser E2E layer additionally needs a global `WebSocket` (Node 22+, or `node --experimental-websocket`) and a Chromium/Chrome binary. When either is missing, `test:e2e` prints a skip notice and exits 0 so `npm test` stays green.
 
 The browser runner is dependency-free and uses the Chrome DevTools Protocol directly. If Chromium is not installed in a standard path, run with:
 
@@ -59,6 +65,11 @@ CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 12. Missing URL columns emit a persistence-stability warning.
 13. Legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format.
 14. Selection detail DOM IDs are sanitized by a dedicated helper.
+15. Search matches real cell values only and ignores the synthetic movie ID.
+16. `escapeHtml` neutralizes HTML metacharacters and stays wired into rendered card markup (XSS guard).
+17. `parseCsv` handles quoted delimiters, escaped quotes, embedded newlines, CRLF and blank lines.
+18. `parseRuntime` and `parseDateValue` cover every supported input shape.
+19. `baseOptionCounts` memoizes per input state and recomputes when filters change.
 
 ### Static asset checks
 

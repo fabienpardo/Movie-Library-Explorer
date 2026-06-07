@@ -454,6 +454,8 @@ async function loadSheet() {
       warnings: detected.warnings
     });
     cardNodeCache.clear();
+    // The counts cache key omits rows/columns, so invalidate it whenever a new dataset is loaded.
+    clearOptionCountsCache();
     reconcilePersistedSelection(usableRows, detected.columns);
 
     renderDiagnostics();
@@ -499,7 +501,16 @@ function matchesList(values, selected, mode) {
 }
 function rowSearchText(row) {
   // Row contents are immutable after load, so the normalized search blob is memoized per row.
-  if (row.__searchText === undefined) row.__searchText = normalize(Object.values(row).join(" "));
+  // Internal bookkeeping keys (the synthetic id and this very cache) must stay out of the blob,
+  // otherwise search would match on tokens like "url"/"fallback" from __movieExplorerId.
+  if (row.__searchText === undefined) {
+    row.__searchText = normalize(
+      Object.entries(row)
+        .filter(([key]) => key !== "__movieExplorerId" && key !== "__searchText")
+        .map(([, value]) => value)
+        .join(" ")
+    );
+  }
   return row.__searchText;
 }
 function matchesSearch(row) { return !state.search || rowSearchText(row).includes(normalize(state.search)); }
@@ -687,7 +698,8 @@ function syncDisplaySettings() {
   document.documentElement.dataset.viewMode = mode;
 }
 function render() {
-  clearOptionCountsCache();
+  // The option-counts cache is keyed on every input that affects it (search/matchMode/selected) and is
+  // cleared on data/filter resets, so it can safely persist across renders instead of being wiped each time.
   const rows = sortRows(filteredRows());
   const mode = effectiveViewMode();
 
@@ -1342,6 +1354,7 @@ if (typeof window !== "undefined") {
     displayTitle,
     effectiveViewMode,
     equivalentTitle,
+    escapeHtml,
     isMovieSelected,
     loadPersistentState,
     makeMovieId,
