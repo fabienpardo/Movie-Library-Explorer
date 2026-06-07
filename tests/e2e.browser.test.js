@@ -36,9 +36,9 @@ test('loads the fixture and renders the library without browser errors', async (
     hasListPosterCard: Boolean(document.querySelector('.movie-card.movie-card--list-with-poster'))
   }));
 
-  assert.equal(snapshot.cards, 510);
+  assert.equal(snapshot.cards, 511);
   assert.equal(snapshot.statusHidden, true);
-  assert.match(snapshot.summary, /510\s*\/\s*510 films affichés/);
+  assert.match(snapshot.summary, /511\s*\/\s*511 films affichés/);
   assert.equal(snapshot.statCards, 0);
   assert.equal(snapshot.diagnosticsHidden, true);
   assert.ok(snapshot.firstCardTitle);
@@ -49,25 +49,25 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.ok(snapshot.posterCount >= 1);
   assert.equal(snapshot.gridMode, 'list');
   assert.equal(snapshot.hasListPosterCard, true);
-  assert.match(snapshot.firstPosterSrc, /^data:image\/png;base64,/);
+  assert.match(snapshot.firstPosterSrc, /^https:\/\//);
 });
 
 test('search reduces displayed results and clear filters restores them', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   await setInputValue(page, '#searchInput', 'matrix');
-  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < 510`, 'search results');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < 511`, 'search results');
 
   const searchSnapshot = await evaluateFunction(page, () => ({
     cards: document.querySelectorAll('.movie-card').length,
     activeText: document.querySelector('#activeFilters').textContent,
     allContainQuery: [...document.querySelectorAll('.movie-card')].every(card => card.textContent.toLowerCase().includes('matrix'))
   }));
-  assert.ok(searchSnapshot.cards > 0 && searchSnapshot.cards < 510);
+  assert.ok(searchSnapshot.cards > 0 && searchSnapshot.cards < 511);
   assert.match(searchSnapshot.activeText, /Recherche:\s*matrix/);
   assert.equal(searchSnapshot.allContainQuery, true);
 
   await click(page, '#clearFilters');
-  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === 510`, 'full result set after clearing');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === 511`, 'full result set after clearing');
   assert.equal(await evaluate(page, `document.querySelector('#activeFilters').textContent.trim()`), '');
 });
 
@@ -83,7 +83,7 @@ test('genre checkbox selection updates cards, count badges and selected chips', 
     hasSelectedChip: Boolean(document.querySelector('.genre-chip--selected')),
     allCardsHaveAction: [...document.querySelectorAll('.movie-card')].every(card => card.textContent.includes('Action'))
   }));
-  assert.ok(snapshot.cards > 0 && snapshot.cards < 510);
+  assert.ok(snapshot.cards > 0 && snapshot.cards < 511);
   assert.equal(snapshot.filterCount, '1');
   assert.equal(snapshot.genreSelectedCount, '1');
   assert.equal(snapshot.hasSelectedChip, true);
@@ -183,7 +183,7 @@ test('mobile renders card view automatically with no display-mode selector', asy
   assert.equal(snapshot.effectiveMode, 'cards');
   assert.equal(snapshot.gridMode, 'cards');
   assert.equal(snapshot.listRows, 0);
-  assert.equal(snapshot.cardRows, 510);
+  assert.equal(snapshot.cardRows, 511);
   assert.equal(snapshot.selectorExists, false);
 });
 
@@ -194,7 +194,7 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   assert.equal(await evaluate(page, `document.querySelector('button[data-selection-id][aria-pressed="true"]')?.textContent.trim()`), '✓');
 
   await setInputValue(page, '#searchInput', 'matrix');
-  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < 510`, 'search after selecting');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < 511`, 'search after selecting');
   assert.equal(await evaluate(page, `document.querySelector('#selectionCount').textContent.trim()`), '1');
 
   await click(page, '#toggleSelectionPanel');
