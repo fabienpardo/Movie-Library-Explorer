@@ -52,7 +52,6 @@ function resetState(hooks, labels, rows, columns) {
     warnings: [],
     search: "",
     sort: "position-desc",
-    viewMode: "cards",
     filterSearch: { actor: "", director: "" },
     matchMode: { genre: "all", actor: "all", director: "all" },
     selected: { genre: new Set(), actor: new Set(), director: new Set() },

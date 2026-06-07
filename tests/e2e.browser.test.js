@@ -30,7 +30,8 @@ test('loads the fixture and renders the library without browser errors', async (
     cardPosition: getComputedStyle(document.querySelector('.movie-card')).position,
     firstPosterSrc: document.querySelector('.movie-card .movie-poster img')?.getAttribute('src'),
     posterCount: document.querySelectorAll('.movie-card .movie-poster img').length,
-    hasCardWithPoster: Boolean(document.querySelector('.movie-card.movie-card--with-poster'))
+    gridMode: document.querySelector('#movieGrid').dataset.viewMode,
+    hasListPosterCard: Boolean(document.querySelector('.movie-card.movie-card--list-with-poster'))
   }));
 
   assert.equal(snapshot.cards, 510);
@@ -44,7 +45,8 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.equal(snapshot.selectionButtonPosition, 'absolute');
   assert.equal(snapshot.cardPosition, 'relative');
   assert.ok(snapshot.posterCount >= 1);
-  assert.equal(snapshot.hasCardWithPoster, true);
+  assert.equal(snapshot.gridMode, 'list');
+  assert.equal(snapshot.hasListPosterCard, true);
   assert.match(snapshot.firstPosterSrc, /^data:image\/png;base64,/);
   assert.deepEqual(diagnostics.consoleErrors, []);
   assert.deepEqual(diagnostics.exceptions, []);
@@ -148,55 +150,49 @@ test('sticky result summary tracks filters, sort and selection count', async ({ 
   await page.closeTarget();
 });
 
-test('display settings switch between cards and list without losing filters', async ({ browserWsUrl }) => {
+test('desktop renders list view automatically with no display-mode selector', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   await clickFilterOptionByLabel(page, '#genreList', 'Action');
   await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 1`, 'one active filter');
-
-  await setSelectValue(page, '#viewModeSelect', 'list');
   await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'list' && document.querySelector('.movie-card--list')`, 'list view');
 
   const listSnapshot = await evaluateFunction(page, () => ({
     mode: document.querySelector('#movieGrid').dataset.viewMode,
+    effectiveMode: window.__MovieExplorerTestHooks.effectiveViewMode(),
     activeCount: window.__MovieExplorerTestHooks.activeCount(),
     listRows: document.querySelectorAll('.movie-card--list').length,
+    cardOnlyRows: document.querySelectorAll('.movie-card--with-poster').length,
     structuredRows: document.querySelectorAll('.movie-card--list .movie-list-top + .movie-list-bottom').length,
     listPosterRows: document.querySelectorAll('.movie-card--list-with-poster .movie-poster--list img').length,
-    storedMode: localStorage.getItem('movieExplorer.viewMode')
+    selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
   assert.equal(listSnapshot.mode, 'list');
+  assert.equal(listSnapshot.effectiveMode, 'list');
   assert.equal(listSnapshot.activeCount, 1);
   assert.ok(listSnapshot.listRows > 0);
+  assert.equal(listSnapshot.cardOnlyRows, 0);
   assert.equal(listSnapshot.structuredRows, listSnapshot.listRows);
   assert.ok(listSnapshot.listPosterRows >= 1);
-  assert.equal(listSnapshot.storedMode, 'list');
-
-  await setSelectValue(page, '#viewModeSelect', 'cards');
-  await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'cards' && !document.querySelector('.movie-card--list')`, 'card view restored');
-  assert.equal(await evaluate(page, `window.__MovieExplorerTestHooks.activeCount()`), 1);
+  assert.equal(listSnapshot.selectorExists, false);
   await page.closeTarget();
 });
 
-test('mobile keeps card view and hides the display-mode selector', async ({ browserWsUrl }) => {
+test('mobile renders card view automatically with no display-mode selector', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl, { mobile: true });
-
-  await setSelectValue(page, '#viewModeSelect', 'list');
-  await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'cards'`, 'mobile forced card view');
+  await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'cards'`, 'mobile card view');
 
   const snapshot = await evaluateFunction(page, () => ({
-    stateMode: window.__MovieExplorerTestHooks.state.viewMode,
     effectiveMode: window.__MovieExplorerTestHooks.effectiveViewMode(),
     gridMode: document.querySelector('#movieGrid').dataset.viewMode,
     listRows: document.querySelectorAll('.movie-card--list').length,
     cardRows: document.querySelectorAll('.movie-card').length,
-    selectorDisplay: getComputedStyle(document.querySelector('#viewModeSelect')).display
+    selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
-  assert.equal(snapshot.stateMode, 'list');
   assert.equal(snapshot.effectiveMode, 'cards');
   assert.equal(snapshot.gridMode, 'cards');
   assert.equal(snapshot.listRows, 0);
   assert.equal(snapshot.cardRows, 510);
-  assert.equal(snapshot.selectorDisplay, 'none');
+  assert.equal(snapshot.selectorExists, false);
   await page.closeTarget();
 });
 

@@ -33,12 +33,21 @@ const categories = {
 const categoryKeys = Object.keys(categories);
 const searchableCategories = categoryKeys.filter(category => categories[category].searchId);
 const DEFAULT_MATCH_MODE = { genre: "all", actor: "all", director: "all" };
-const VIEW_MODE_VALUES = new Set(["cards", "list"]);
 const STORAGE_KEYS = {
-  viewMode: "movieExplorer.viewMode",
   selection: "movieExplorer.selection"
 };
 let storageAvailabilityCache = null;
+
+// Remember poster outcomes across re-renders so re-created cards paint instantly
+// instead of re-showing the loading skeleton (or retrying a known-broken poster).
+const loadedPosters = new Set();
+const failedPosters = new Set();
+
+// Pool of filtered-out card nodes, keyed by movie id. Re-attaching the original
+// node (with its already-painted poster) avoids the repaint flash a fresh <img>
+// would cause when a movie returns to the result set.
+const cardNodeCache = new Map();
+const CARD_CACHE_LIMIT = 800;
 
 const els = {};
 const state = {
@@ -48,7 +57,6 @@ const state = {
   warnings: [],
   search: "",
   sort: "position-desc",
-  viewMode: "cards",
   filterSearch: { actor: "", director: "" },
   matchMode: { ...DEFAULT_MATCH_MODE },
   selected: { genre: new Set(), actor: new Set(), director: new Set() },
@@ -106,18 +114,12 @@ function removeStoredValue(key) {
   catch {}
 }
 function loadPersistentState() {
-  const viewMode = readStoredValue(STORAGE_KEYS.viewMode);
-  if (VIEW_MODE_VALUES.has(viewMode)) state.viewMode = viewMode;
-
   try {
     const selection = JSON.parse(readStoredValue(STORAGE_KEYS.selection) || "[]");
     if (Array.isArray(selection)) state.selection = new Set(selection.filter(Boolean));
   } catch {
     state.selection = new Set();
   }
-}
-function persistViewSettings() {
-  writeStoredValue(STORAGE_KEYS.viewMode, state.viewMode);
 }
 function persistSelection() {
   if (state.selection.size) writeStoredValue(STORAGE_KEYS.selection, JSON.stringify([...state.selection]));
@@ -187,7 +189,7 @@ function cacheEls() {
   [
     "status", "diagnostics", "resultSummary", "movieGrid", "activeFilters", "selectionPanel", "filterPanel", "filterBackdrop",
     "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
-    "searchInput", "sortSelect", "viewModeSelect", "toggleSelectionPanel", "selectionCount",
+    "searchInput", "sortSelect", "toggleSelectionPanel", "selectionCount",
     "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode"
   ].forEach(id => { els[id] = byId(id); });
 
@@ -411,7 +413,6 @@ function resetFilters() {
 function syncControls() {
   els.searchInput.value = state.search;
   els.sortSelect.value = state.sort;
-  els.viewModeSelect.value = state.viewMode;
   for (const category of categoryKeys) {
     byId(`${category}MatchMode`).value = state.matchMode[category];
     const searchId = categories[category].searchId;
@@ -452,6 +453,7 @@ async function loadSheet() {
       columns: detected.columns,
       warnings: detected.warnings
     });
+    cardNodeCache.clear();
     reconcilePersistedSelection(usableRows, detected.columns);
 
     renderDiagnostics();
@@ -669,8 +671,10 @@ function renderResultSummary(rows) {
     pluralize(selection, "film sélectionné", "films sélectionnés")
   ].map(item => `<span>${item}</span>`).join("");
 }
+// Single source of truth for the layout: list on desktop, cards on mobile.
+// Driven entirely by the viewport — there is no user-facing toggle.
 function effectiveViewMode() {
-  return DESKTOP_QUERY.matches ? state.viewMode : "cards";
+  return DESKTOP_QUERY.matches ? "list" : "cards";
 }
 function syncDisplaySettings() {
   const mode = effectiveViewMode();
@@ -689,10 +693,101 @@ function render() {
   renderFilterLists();
   syncSelectionCount();
   renderSelectionPanel();
-  els.movieGrid.innerHTML = rows.length
-    ? rows.map(mode === "list" ? renderMovieListItem : renderMovieCard).join("")
-    : `<div class="empty">Aucun film ne correspond aux filtres actuels.</div>`;
+  renderGrid(rows, mode);
   requestAnimationFrame(syncBackToTop);
+}
+function renderEmptyState() {
+  const hasFilters = activeCount() > 0;
+  return `<div class="empty">
+    <p>Aucun film ne correspond aux filtres actuels.</p>
+    ${hasFilters ? `<button class="secondary-button" type="button" data-empty-clear>Tout effacer</button>` : ""}
+  </div>`;
+}
+// Keyed reconciliation: reuse existing card nodes (and their already-loaded poster
+// images) for movies still present, refreshing only the body and the order. This
+// keeps posters from reloading when filters, search, or sort change the result set.
+function stashCardNode(id, node, mode) {
+  if (!id) return;
+  cardNodeCache.delete(id);
+  cardNodeCache.set(id, { node, mode });
+  while (cardNodeCache.size > CARD_CACHE_LIMIT) {
+    cardNodeCache.delete(cardNodeCache.keys().next().value);
+  }
+}
+function takeCardNode(id, mode, row) {
+  const cached = cardNodeCache.get(id);
+  if (!cached || cached.mode !== mode) return null;
+  cardNodeCache.delete(id);
+  updateCardContent(cached.node, row, mode);
+  return cached.node;
+}
+function renderGrid(rows, mode) {
+  const grid = els.movieGrid;
+  if (!rows.length) {
+    for (const node of Array.from(grid.children)) {
+      if (node.dataset && node.dataset.movieId) stashCardNode(node.dataset.movieId, node, node.dataset.cardMode || mode);
+    }
+    grid.innerHTML = renderEmptyState();
+    return;
+  }
+
+  const reusable = new Map();
+  for (const node of Array.from(grid.children)) {
+    const id = node.dataset && node.dataset.movieId;
+    if (id && node.dataset.cardMode === mode) {
+      reusable.set(id, node);
+      cardNodeCache.delete(id);
+    } else {
+      node.remove();
+    }
+  }
+
+  const ordered = rows.map(row => {
+    const id = movieId(row);
+    const live = reusable.get(id);
+    if (live) {
+      reusable.delete(id);
+      updateCardContent(live, row, mode);
+      return live;
+    }
+    const pooled = takeCardNode(id, mode, row);
+    if (pooled) return pooled;
+    const template = document.createElement("div");
+    template.innerHTML = mode === "list" ? renderMovieListItem(row) : renderMovieCard(row);
+    const node = template.firstElementChild;
+    node.dataset.cardMode = mode;
+    return node;
+  });
+
+  // Cards no longer in the result set: keep their nodes (and painted posters) in
+  // the pool so they can return without a reload, then detach from the DOM.
+  for (const [id, node] of reusable) {
+    stashCardNode(id, node, mode);
+    node.remove();
+  }
+
+  // Place nodes in the desired order, moving reused ones as needed.
+  let ref = grid.firstChild;
+  for (const node of ordered) {
+    if (node === ref) ref = ref.nextSibling;
+    else grid.insertBefore(node, ref);
+  }
+  while (ref) {
+    const next = ref.nextSibling;
+    if (ref.dataset && ref.dataset.movieId) stashCardNode(ref.dataset.movieId, ref, ref.dataset.cardMode || mode);
+    ref.remove();
+    ref = next;
+  }
+}
+function updateCardContent(node, row, mode) {
+  const model = movieViewModel(row);
+  if (mode === "list") {
+    const content = node.querySelector(".movie-list-content");
+    if (content) content.innerHTML = renderMovieListBody(model);
+  } else {
+    const body = node.querySelector(".movie-card__body");
+    if (body) body.innerHTML = renderMovieCardBody(model);
+  }
 }
 function movieViewModel(row) {
   const title = displayTitle(row);
@@ -713,12 +808,31 @@ function movieViewModel(row) {
     directors: listFor(row, "director")
   };
 }
+function posterInitials(title) {
+  const words = String(title || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  const first = words[0][0] || "";
+  const last = words.length > 1 ? words[words.length - 1][0] || "" : "";
+  return (first + last).toUpperCase() || "?";
+}
 function renderMoviePoster(model, modifierClass = "") {
   if (!model.posterUrl) return "";
-  const className = modifierClass ? `movie-poster ${modifierClass}` : "movie-poster";
+  const url = model.posterUrl;
+  const initials = posterInitials(model.title);
+  const baseClass = modifierClass ? `movie-poster ${modifierClass}` : "movie-poster";
+  const attrs = `data-poster-initials="${escapeHtml(initials)}" data-poster-url="${escapeHtml(url)}"`;
+  // Poster already failed before: render the fallback tile directly, no retry.
+  if (failedPosters.has(url)) {
+    return `
+    <figure class="${baseClass} movie-poster--fallback" ${attrs}>
+      <span aria-hidden="true">${escapeHtml(initials)}</span>
+    </figure>`;
+  }
+  // Poster already loaded before: mark loaded so no skeleton shimmer is shown.
+  const loadedClass = loadedPosters.has(url) ? " is-loaded" : "";
   return `
-    <figure class="${className}">
-      <img src="${escapeHtml(model.posterUrl)}" alt="Affiche de ${model.titleHtml}" loading="lazy" decoding="async">
+    <figure class="${baseClass}${loadedClass}" ${attrs}>
+      <img src="${escapeHtml(url)}" alt="Affiche de ${model.titleHtml}" loading="lazy" decoding="async">
     </figure>`;
 }
 function renderMovieTitle(model) {
@@ -756,43 +870,47 @@ function renderSelectionButton(rowOrModel) {
   const symbol = selected ? "✓" : "+";
   return `<button class="selection-toggle${selected ? " is-selected" : ""}" type="button" data-selection-id="${escapeHtml(id)}" aria-pressed="${selected}" aria-label="${label}" title="${label}"><span aria-hidden="true">${symbol}</span></button>`;
 }
+function renderMovieCardBody(model) {
+  return `
+    <header class="movie-card__header">
+      <div class="movie-card__title-block">${renderMovieTitle(model)}</div>
+      ${renderSelectionButton(model)}
+    </header>
+    <div class="badge-row">${renderMetaBadges(model)}</div>
+    <div class="credits">
+      ${renderDirectorCredit(model)}
+      ${renderActorCredit(model)}
+    </div>
+    <div class="chips">${renderGenreChips(model)}</div>`;
+}
 function renderMovieCard(row) {
   const model = movieViewModel(row);
   return `
     <article class="movie-card${model.posterUrl ? " movie-card--with-poster" : ""}" data-movie-id="${escapeHtml(model.id)}">
       ${renderMoviePoster(model)}
-      <div class="movie-card__body">
-        <header class="movie-card__header">
-          <div class="movie-card__title-block">${renderMovieTitle(model)}</div>
-          ${renderSelectionButton(model)}
-        </header>
-        <div class="badge-row">${renderMetaBadges(model)}</div>
-        <div class="credits">
-          ${renderDirectorCredit(model)}
-          ${renderActorCredit(model)}
-        </div>
-        <div class="chips">${renderGenreChips(model)}</div>
-      </div>
+      <div class="movie-card__body">${renderMovieCardBody(model)}</div>
     </article>`;
+}
+function renderMovieListBody(model) {
+  return `
+    <div class="movie-list-top">
+      <div class="movie-list-main">
+        ${renderMovieTitle(model)}
+        ${renderDirectorCredit(model, "movie-list-credit")}
+      </div>
+      <div class="movie-list-action">${renderSelectionButton(model)}</div>
+    </div>
+    <div class="movie-list-bottom">
+      <div class="movie-list-meta badge-row">${renderMetaBadges(model)}</div>
+      <div class="movie-list-genres chips">${renderGenreChips(model)}</div>
+    </div>`;
 }
 function renderMovieListItem(row) {
   const model = movieViewModel(row);
   return `
     <article class="movie-card movie-card--list${model.posterUrl ? " movie-card--list-with-poster" : ""}" data-movie-id="${escapeHtml(model.id)}">
       ${renderMoviePoster(model, "movie-poster--list")}
-      <div class="movie-list-content">
-        <div class="movie-list-top">
-          <div class="movie-list-main">
-            ${renderMovieTitle(model)}
-            ${renderDirectorCredit(model, "movie-list-credit")}
-          </div>
-          <div class="movie-list-action">${renderSelectionButton(model)}</div>
-        </div>
-        <div class="movie-list-bottom">
-          <div class="movie-list-meta badge-row">${renderMetaBadges(model)}</div>
-          <div class="movie-list-genres chips">${renderGenreChips(model)}</div>
-        </div>
-      </div>
+      <div class="movie-list-content">${renderMovieListBody(model)}</div>
     </article>`;
 }
 function ratingClass(value) {
@@ -802,14 +920,33 @@ function ratingClass(value) {
 }
 function highlightList(values, selected) {
   const category = selected === state.selected.director ? "director" : "actor";
+  // Glue each name to its trailing comma inside a nowrap unit so a line can only
+  // break between people (at the space), never before a comma.
   return values
-    .map(value => renderCardFilterButton(category, value, "credit-token", "selected-credit"))
-    .join(`<span class="credit-separator">, </span>`);
+    .map((value, index) => {
+      const token = renderCardFilterButton(category, value, "credit-token", "selected-credit");
+      const comma = index < values.length - 1 ? `<span class="credit-separator">,</span>` : "";
+      return `<span class="credit-item">${token}${comma}</span>`;
+    })
+    .join(" ");
 }
 function handlePosterError(event) {
   const image = event.target.closest?.(".movie-poster img");
   if (!image) return;
-  image.closest(".movie-poster")?.remove();
+  const figure = image.closest(".movie-poster");
+  if (!figure) return;
+  if (figure.dataset.posterUrl) failedPosters.add(figure.dataset.posterUrl);
+  const initials = figure.getAttribute("data-poster-initials") || "?";
+  figure.classList.add("movie-poster--fallback");
+  figure.innerHTML = `<span aria-hidden="true">${escapeHtml(initials)}</span>`;
+}
+function handlePosterLoad(event) {
+  const image = event.target.closest?.(".movie-poster img");
+  if (!image) return;
+  const figure = image.closest(".movie-poster");
+  if (!figure) return;
+  if (figure.dataset.posterUrl) loadedPosters.add(figure.dataset.posterUrl);
+  figure.classList.add("is-loaded");
 }
 function renderCardFilterButton(category, value, baseClass, selectedClass) {
   const selected = state.selected[category].has(value);
@@ -835,13 +972,30 @@ function toggleMovieSelectionById(id) {
     state.selection.add(id);
   }
   persistSelection();
-  render();
+  syncSelectionUI();
 }
 function clearSelection() {
   state.selection.clear();
   state.selectionDetailId = "";
   persistSelection();
-  render();
+  syncSelectionUI();
+}
+// Selection does not change which movies are shown or their order, so update the
+// selection controls in place instead of rebuilding the grid (which would reload posters).
+function syncSelectionUI() {
+  document.querySelectorAll("button[data-selection-id]").forEach(button => {
+    const selected = state.selection.has(button.dataset.selectionId);
+    const label = selected ? "Retirer de la sélection" : "Ajouter à la sélection";
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+    const symbol = button.querySelector("span");
+    if (symbol) symbol.textContent = selected ? "✓" : "+";
+  });
+  syncSelectionCount();
+  renderResultSummary(filteredRows());
+  renderSelectionPanel();
 }
 function toggleSelectionDetail(id) {
   if (!id) return;
@@ -1055,11 +1209,6 @@ function removeFilter(category, value) {
 function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
-  els.viewModeSelect.addEventListener("change", event => {
-    state.viewMode = VIEW_MODE_VALUES.has(event.target.value) ? event.target.value : "cards";
-    persistViewSettings();
-    render();
-  });
   els.toggleSelectionPanel.addEventListener("click", toggleSelectionPanel);
   categoryKeys.forEach(category => byId(`${category}MatchMode`).addEventListener("change", event => { state.matchMode[category] = event.target.value; render(); }));
 
@@ -1083,8 +1232,15 @@ function bindEvents() {
 
   els.movieGrid.addEventListener("error", handlePosterError, true);
   els.selectionPanel.addEventListener("error", handlePosterError, true);
+  els.movieGrid.addEventListener("load", handlePosterLoad, true);
+  els.selectionPanel.addEventListener("load", handlePosterLoad, true);
 
   els.movieGrid.addEventListener("click", event => {
+    if (event.target.closest("button[data-empty-clear]")) {
+      clearFilters();
+      return;
+    }
+
     const selectionButton = event.target.closest("button[data-selection-id]");
     if (selectionButton) {
       toggleMovieSelectionById(selectionButton.dataset.selectionId);
