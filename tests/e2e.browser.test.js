@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 const assert = require('node:assert/strict');
 const {
+  browserTestSkipReason,
+  flushPages,
   startChromium,
   createPage,
   evaluate,
@@ -16,7 +18,7 @@ const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 
 test('loads the fixture and renders the library without browser errors', async ({ browserWsUrl }) => {
-  const { page, diagnostics } = await createPage(browserWsUrl);
+  const { page } = await createPage(browserWsUrl);
   const snapshot = await evaluateFunction(page, () => ({
     cards: document.querySelectorAll('.movie-card').length,
     statusHidden: document.querySelector('#status').hidden,
@@ -46,9 +48,6 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.ok(snapshot.posterCount >= 1);
   assert.equal(snapshot.hasCardWithPoster, true);
   assert.match(snapshot.firstPosterSrc, /^data:image\/png;base64,/);
-  assert.deepEqual(diagnostics.consoleErrors, []);
-  assert.deepEqual(diagnostics.exceptions, []);
-  await page.closeTarget();
 });
 
 test('search reduces displayed results and clear filters restores them', async ({ browserWsUrl }) => {
@@ -68,7 +67,6 @@ test('search reduces displayed results and clear filters restores them', async (
   await click(page, '#clearFilters');
   await waitForExpression(page, `document.querySelectorAll('.movie-card').length === 510`, 'full result set after clearing');
   assert.equal(await evaluate(page, `document.querySelector('#activeFilters').textContent.trim()`), '');
-  await page.closeTarget();
 });
 
 test('genre checkbox selection updates cards, count badges and selected chips', async ({ browserWsUrl }) => {
@@ -88,7 +86,6 @@ test('genre checkbox selection updates cards, count badges and selected chips', 
   assert.equal(snapshot.genreSelectedCount, '1');
   assert.equal(snapshot.hasSelectedChip, true);
   assert.equal(snapshot.allCardsHaveAction, true);
-  await page.closeTarget();
 });
 
 test('card filter buttons toggle a filter on and off', async ({ browserWsUrl }) => {
@@ -106,7 +103,6 @@ test('card filter buttons toggle a filter on and off', async ({ browserWsUrl }) 
   await click(page, 'button[data-card-filter-category="genre"]');
   await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 0`, 'chip filter to be removed');
   assert.equal(await evaluate(page, `document.querySelector('#activeFilters').textContent.trim()`), '');
-  await page.closeTarget();
 });
 
 test('sort selector changes the first rendered card consistently with app sorting logic', async ({ browserWsUrl }) => {
@@ -121,9 +117,7 @@ test('sort selector changes the first rendered card consistently with app sortin
       return { expected, rendered };
     });
     assert.equal(snapshot.rendered, snapshot.expected, `${sortValue} should render expected first card`);
-  }
-  await page.closeTarget();
-});
+  }});
 
 test('sticky result summary tracks filters, sort and selection count', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
@@ -145,7 +139,6 @@ test('sticky result summary tracks filters, sort and selection count', async ({ 
   assert.match(snapshot.text, /1 filtre actif/);
   assert.match(snapshot.text, /1 film sélectionné/);
   assert.equal(snapshot.className, 'result-summary');
-  await page.closeTarget();
 });
 
 test('display settings switch between cards and list without losing filters', async ({ browserWsUrl }) => {
@@ -174,7 +167,6 @@ test('display settings switch between cards and list without losing filters', as
   await setSelectValue(page, '#viewModeSelect', 'cards');
   await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'cards' && !document.querySelector('.movie-card--list')`, 'card view restored');
   assert.equal(await evaluate(page, `window.__MovieExplorerTestHooks.activeCount()`), 1);
-  await page.closeTarget();
 });
 
 test('mobile keeps card view and hides the display-mode selector', async ({ browserWsUrl }) => {
@@ -197,7 +189,6 @@ test('mobile keeps card view and hides the display-mode selector', async ({ brow
   assert.equal(snapshot.listRows, 0);
   assert.equal(snapshot.cardRows, 510);
   assert.equal(snapshot.selectorDisplay, 'none');
-  await page.closeTarget();
 });
 
 test('temporary selection can add, review, remove and clear movies', async ({ browserWsUrl }) => {
@@ -226,12 +217,14 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
     hasFullCard: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-card')),
     hasActors: document.querySelector('#selectionPanel .selection-detail .actors-line')?.textContent.length > 0,
     hasPoster: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-poster img')),
-    expanded: document.querySelector('button[data-selection-detail-id]')?.getAttribute('aria-expanded')
+    expanded: document.querySelector('button[data-selection-detail-id]')?.getAttribute('aria-expanded'),
+    summaryFocused: document.activeElement === document.querySelector('button[data-selection-detail-id]')
   }));
   assert.equal(detailSnapshot.hasFullCard, true);
   assert.equal(detailSnapshot.hasActors, true);
   assert.equal(detailSnapshot.hasPoster, true);
   assert.equal(detailSnapshot.expanded, 'true');
+  assert.equal(detailSnapshot.summaryFocused, true);
 
   await click(page, 'button[data-selection-remove-id]');
   await waitForExpression(page, `document.querySelector('#selectionCount').hidden === true`, 'selection count hidden after remove');
@@ -242,7 +235,6 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   await click(page, 'button[data-selection-action="clear"]');
   await waitForExpression(page, `document.querySelector('#selectionCount').hidden === true`, 'selection count hidden after clear');
   assert.equal(await evaluate(page, `localStorage.getItem('movieExplorer.selection')`), null);
-  await page.closeTarget();
 });
 
 test('failed reload clears stale cards, active filters and filter lists', async ({ browserWsUrl }) => {
@@ -270,7 +262,6 @@ test('failed reload clears stale cards, active filters and filter lists', async 
   assert.equal(snapshot.searchValue, '');
   assert.equal(snapshot.genreList, 'Aucune donnée chargée');
   assert.equal(snapshot.diagnosticsHidden, true);
-  await page.closeTarget();
 });
 
 test('mobile filter panel opens as a dialog and closes on Escape', async ({ browserWsUrl }) => {
@@ -299,7 +290,6 @@ test('mobile filter panel opens as a dialog and closes on Escape', async ({ brow
 
   await evaluate(page, `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await waitForExpression(page, `document.querySelector('#filterPanel').getAttribute('aria-hidden') === 'true'`, 'mobile filter panel closes');
-  await page.closeTarget();
 });
 
 test('mobile actor search result can be selected with the first touch after typing', async ({ browserWsUrl }) => {
@@ -330,10 +320,15 @@ test('mobile actor search result can be selected with the first touch after typi
   assert.equal(snapshot.actorCount, '1');
   assert.equal(snapshot.filterCount, '1');
   assert.equal(snapshot.selectedButtonPressed, true);
-  await page.closeTarget();
 });
 
 (async () => {
+  const skipReason = browserTestSkipReason();
+  if (skipReason) {
+    console.log(`⚠ Skipping browser E2E tests: ${skipReason}`);
+    return;
+  }
+
   const chromium = startChromium();
   let browserWsUrl;
   try {
@@ -342,6 +337,11 @@ test('mobile actor search result can be selected with the first touch after typi
     for (const { name, fn } of tests) {
       try {
         await fn({ browserWsUrl });
+        // Drain and close every page the scenario opened, then fail it on any console error or uncaught exception.
+        for (const diagnostics of await flushPages()) {
+          assert.deepEqual(diagnostics.consoleErrors, [], `console errors during "${name}"`);
+          assert.deepEqual(diagnostics.exceptions, [], `uncaught exceptions during "${name}"`);
+        }
         passed += 1;
         console.log(`✓ ${name}`);
       } catch (error) {

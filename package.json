@@ -4,5 +4,8 @@
     "test:unit": "node tests/regression.test.js",
     "test:assets": "node tests/static-assets.test.js",
     "test:e2e": "node tests/e2e.browser.test.js"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
