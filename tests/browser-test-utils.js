@@ -24,6 +24,32 @@ function findChromium() {
   return executable;
 }
 
+// Returns a human-readable reason when the environment cannot run browser E2E tests, otherwise null.
+// Lets the runner skip cleanly instead of crashing on a missing global or executable.
+function browserTestSkipReason() {
+  if (typeof WebSocket === 'undefined') {
+    return 'global WebSocket is unavailable (requires Node >= 22, or run node with --experimental-websocket).';
+  }
+  if (!CHROMIUM_CANDIDATES.some(candidate => fs.existsSync(candidate))) {
+    return 'no Chromium/Chrome executable found (set CHROMIUM_PATH to enable browser E2E tests).';
+  }
+  return null;
+}
+
+// The runner owns page lifecycle: createPage registers pages here, flushPages drains and closes them between tests.
+const openPages = [];
+async function flushPages() {
+  const pages = openPages.splice(0, openPages.length);
+  const diagnostics = [];
+  for (const { page, diagnostics: pageDiagnostics } of pages) {
+    // One awaited round-trip flushes any console/exception events still in flight: CDP messages are ordered per socket.
+    try { await page.send('Runtime.evaluate', { expression: 'void 0' }); } catch {}
+    diagnostics.push(pageDiagnostics);
+    await page.closeTarget();
+  }
+  return diagnostics;
+}
+
 function requestJson(url, options = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request(url, options, res => {
@@ -143,6 +169,7 @@ async function createPage(browserWsUrl, options = {}) {
   const target = await requestJson(`${httpOrigin}/json/new?${encodeURIComponent('about:blank')}`, { method: 'PUT' });
   const page = new CDPClient(target.webSocketDebuggerUrl);
   const diagnostics = { consoleErrors: [], exceptions: [] };
+  openPages.push({ page, diagnostics });
 
   page.on('Runtime.consoleAPICalled', params => {
     if (params.type === 'error') diagnostics.consoleErrors.push(params.args?.map(arg => arg.value || arg.description).join(' '));
@@ -302,6 +329,8 @@ async function clickFilterOptionByLabel(page, listSelector, labelText) {
 
 
 module.exports = {
+  browserTestSkipReason,
+  flushPages,
   startChromium,
   createPage,
   evaluate,

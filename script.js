@@ -497,7 +497,12 @@ function matchesList(values, selected, mode) {
   if (!wanted.length) return true;
   return mode === "all" ? wanted.every(value => values.includes(value)) : wanted.some(value => values.includes(value));
 }
-function matchesSearch(row) { return !state.search || normalize(Object.values(row).join(" ")).includes(normalize(state.search)); }
+function rowSearchText(row) {
+  // Row contents are immutable after load, so the normalized search blob is memoized per row.
+  if (row.__searchText === undefined) row.__searchText = normalize(Object.values(row).join(" "));
+  return row.__searchText;
+}
+function matchesSearch(row) { return !state.search || rowSearchText(row).includes(normalize(state.search)); }
 function matchesFilters(row, skipCategory = null) {
   return matchesSearch(row) && categoryKeys.every(category => (
     category === skipCategory || matchesList(listFor(row, category), state.selected[category], state.matchMode[category])
@@ -1001,6 +1006,9 @@ function toggleSelectionDetail(id) {
   if (!id) return;
   state.selectionDetailId = state.selectionDetailId === id ? "" : id;
   renderSelectionPanel();
+  // renderSelectionPanel rebuilds the panel's markup, so return focus to the summary the user just activated.
+  const selector = typeof CSS !== "undefined" && CSS.escape ? `button[data-selection-detail-id="${CSS.escape(id)}"]` : null;
+  if (selector) els.selectionPanel?.querySelector(selector)?.focus();
 }
 function toggleSelectionPanel() {
   state.selectionPanelOpen = !state.selectionPanelOpen;
