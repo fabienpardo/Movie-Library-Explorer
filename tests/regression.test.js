@@ -92,6 +92,7 @@ test("uploaded fixture columns are detected by aliases", () => {
   assert.equal(detected.columns.title, "Title");
   assert.equal(detected.columns.originalTitle, "Original Title");
   assert.equal(detected.columns.url, "URL");
+  assert.equal(detected.columns.poster, "Poster URL");
   assert.equal(detected.columns.imdbRating, "IMDb Rating");
   assert.equal(detected.columns.runtime, "Runtime (mins)");
   assert.equal(detected.columns.year, "Year");
@@ -199,8 +200,20 @@ test("runtime, rating and IMDb URL helpers handle fixture values", () => {
   assert.equal(h.ratingClass("7.1"), "meta-badge--rating-mid");
   assert.equal(h.ratingClass("6.5"), "meta-badge--rating-low");
   assert.equal(h.movieUrl(first), "https://www.imdb.com/title/tt0187078/");
+  assert.match(h.posterUrl(first), /^data:image\/png;base64,/);
 });
 
+
+test("poster columns are detected and sanitized for card rendering", () => {
+  const h = loadAppHooks();
+  const labels = ["Title", "Image Link", "Cover URL", "Poster URL"];
+  const detected = h.detectColumns(labels);
+
+  assert.equal(detected.columns.poster, "Image Link");
+  assert.equal(h.safeImageUrl("https://image.tmdb.org/t/p/w342/example.jpg"), "https://image.tmdb.org/t/p/w342/example.jpg");
+  assert.match(h.safeImageUrl("data:image/png;base64,iVBORw0KGgo="), /^data:image\/png;base64,/);
+  assert.equal(h.safeImageUrl("javascript:alert(1)"), "");
+});
 
 test("movie IDs prefer stable IMDb URLs before normalized fallback IDs", () => {
   const h = loadAppHooks();

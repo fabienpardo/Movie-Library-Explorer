@@ -27,7 +27,10 @@ test('loads the fixture and renders the library without browser errors', async (
     selectionButtonText: document.querySelector('.movie-card button[data-selection-id]')?.textContent.trim(),
     selectionButtonLabel: document.querySelector('.movie-card button[data-selection-id]')?.getAttribute('aria-label'),
     selectionButtonPosition: getComputedStyle(document.querySelector('.movie-card button[data-selection-id]')).position,
-    cardPosition: getComputedStyle(document.querySelector('.movie-card')).position
+    cardPosition: getComputedStyle(document.querySelector('.movie-card')).position,
+    firstPosterSrc: document.querySelector('.movie-card .movie-poster img')?.getAttribute('src'),
+    posterCount: document.querySelectorAll('.movie-card .movie-poster img').length,
+    hasCardWithPoster: Boolean(document.querySelector('.movie-card.movie-card--with-poster'))
   }));
 
   assert.equal(snapshot.cards, 510);
@@ -40,6 +43,9 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.equal(snapshot.selectionButtonLabel, 'Ajouter à la sélection');
   assert.equal(snapshot.selectionButtonPosition, 'absolute');
   assert.equal(snapshot.cardPosition, 'relative');
+  assert.ok(snapshot.posterCount >= 1);
+  assert.equal(snapshot.hasCardWithPoster, true);
+  assert.match(snapshot.firstPosterSrc, /^data:image\/png;base64,/);
   assert.deepEqual(diagnostics.consoleErrors, []);
   assert.deepEqual(diagnostics.exceptions, []);
   await page.closeTarget();
@@ -155,12 +161,14 @@ test('display settings switch between cards and list without losing filters', as
     activeCount: window.__MovieExplorerTestHooks.activeCount(),
     listRows: document.querySelectorAll('.movie-card--list').length,
     structuredRows: document.querySelectorAll('.movie-card--list .movie-list-top + .movie-list-bottom').length,
+    listPosterRows: document.querySelectorAll('.movie-card--list-with-poster .movie-poster--list img').length,
     storedMode: localStorage.getItem('movieExplorer.viewMode')
   }));
   assert.equal(listSnapshot.mode, 'list');
   assert.equal(listSnapshot.activeCount, 1);
   assert.ok(listSnapshot.listRows > 0);
   assert.equal(listSnapshot.structuredRows, listSnapshot.listRows);
+  assert.ok(listSnapshot.listPosterRows >= 1);
   assert.equal(listSnapshot.storedMode, 'list');
 
   await setSelectValue(page, '#viewModeSelect', 'cards');
@@ -217,10 +225,12 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   const detailSnapshot = await evaluateFunction(page, () => ({
     hasFullCard: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-card')),
     hasActors: document.querySelector('#selectionPanel .selection-detail .actors-line')?.textContent.length > 0,
+    hasPoster: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-poster img')),
     expanded: document.querySelector('button[data-selection-detail-id]')?.getAttribute('aria-expanded')
   }));
   assert.equal(detailSnapshot.hasFullCard, true);
   assert.equal(detailSnapshot.hasActors, true);
+  assert.equal(detailSnapshot.hasPoster, true);
   assert.equal(detailSnapshot.expanded, 'true');
 
   await click(page, 'button[data-selection-remove-id]');

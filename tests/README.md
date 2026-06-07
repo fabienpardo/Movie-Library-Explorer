@@ -79,7 +79,7 @@ CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 4. Card filter buttons toggle filters on and off.
 5. Sort options update the first rendered card consistently with app sorting logic.
 6. The sticky result summary tracks filters, sort and selection count.
-7. Display settings switch between cards/list without losing filters on desktop.
+7. Display settings switch between cards/list without losing filters on desktop, including compact list posters.
 8. Mobile keeps card view and hides the display-mode selector.
 9. Temporary selection can add, review, remove and clear movies.
 10. Failed reload clears stale cards, active filters and filter lists.

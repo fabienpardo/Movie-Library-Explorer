@@ -48,7 +48,7 @@ test('cache-busting versions are aligned with the current package version', () =
   const manifest = fs.readFileSync(path.join(rootDir, 'manifest.webmanifest'), 'utf8');
   const versionMatches = [...`${indexHtml}\n${manifest}`.matchAll(/\?v=([^\"']+)/g)].map(match => match[1]);
   assert.ok(versionMatches.length >= 6, 'cache-busted asset references should be present');
-  assert.deepEqual([...new Set(versionMatches)], ['8.4.2']);
+  assert.deepEqual([...new Set(versionMatches)], ['8.4.4']);
 });
 
 test('removed UI features and fragile selectors do not leave obsolete code paths', () => {
@@ -76,6 +76,8 @@ test('roadmap styles include sticky summary and list view hooks', () => {
   const css = fs.readFileSync(path.join(rootDir, 'style.css'), 'utf8');
   assert.match(css, /\.result-summary\s*\{[^}]*position:\s*sticky/s);
   assert.match(css, /\.movie-grid\[data-view-mode="list"\]/);
+  assert.match(css, /\.movie-card--list-with-poster/);
+  assert.match(css, /\.movie-poster--list/);
   assert.match(css, /\.selection-detail/);
 });
 

@@ -19,6 +19,7 @@ const columnAliases = {
   position: ["position", "library position", "library rank", "library order", "rank", "order"],
   imdbRating: ["imdb rating", "imdb", "imdb score", "imdb rate", "imdb user rating"],
   url: ["url", "link", "movie url", "imdb url", "imdb link", "imdb title url", "imdb page", "imdb title page"],
+  poster: ["poster", "poster url", "poster link", "cover", "cover url", "cover link", "image", "image url", "image link", "affiche", "affiche url", "affiche link"],
   country: ["country", "countries", "production country", "production countries", "main country", "origin country", "country of origin", "nationality"],
   actors: ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"],
   directors: ["director", "directors", "directed by"]
@@ -264,6 +265,7 @@ function detectColumns(labels) {
       position: pick(columnAliases.position),
       imdbRating: pick(columnAliases.imdbRating),
       url,
+      poster: pick(columnAliases.poster),
       country: pick(columnAliases.country),
       actors: pick(columnAliases.actors),
       directors: pick(columnAliases.directors)
@@ -344,6 +346,19 @@ function displayOriginalTitle(row) {
   const title = cell(row, "title").trim();
   return original && equivalentTitle(original) !== equivalentTitle(title) ? original : "";
 }
+function safeImageUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(raw)) return raw;
+
+  try {
+    const url = new URL(raw);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
 function movieUrl(row) {
   const raw = cell(row, "url").trim();
   if (!raw) return "";
@@ -354,6 +369,9 @@ function movieUrl(row) {
   } catch {
     return "";
   }
+}
+function posterUrl(row) {
+  return safeImageUrl(cell(row, "poster"));
 }
 
 function encodeFilterValue(value) {
@@ -685,6 +703,7 @@ function movieViewModel(row) {
     titleHtml: escapeHtml(title),
     originalTitle: displayOriginalTitle(row),
     url: movieUrl(row),
+    posterUrl: posterUrl(row),
     rating: cell(row, "imdbRating"),
     runtime: parseRuntime(cell(row, "runtime")),
     year: cell(row, "year"),
@@ -693,6 +712,14 @@ function movieViewModel(row) {
     actors: listFor(row, "actor"),
     directors: listFor(row, "director")
   };
+}
+function renderMoviePoster(model, modifierClass = "") {
+  if (!model.posterUrl) return "";
+  const className = modifierClass ? `movie-poster ${modifierClass}` : "movie-poster";
+  return `
+    <figure class="${className}">
+      <img src="${escapeHtml(model.posterUrl)}" alt="Affiche de ${model.titleHtml}" loading="lazy" decoding="async">
+    </figure>`;
 }
 function renderMovieTitle(model) {
   const title = model.url
@@ -732,33 +759,39 @@ function renderSelectionButton(rowOrModel) {
 function renderMovieCard(row) {
   const model = movieViewModel(row);
   return `
-    <article class="movie-card" data-movie-id="${escapeHtml(model.id)}">
-      <header class="movie-card__header">
-        <div class="movie-card__title-block">${renderMovieTitle(model)}</div>
-        ${renderSelectionButton(model)}
-      </header>
-      <div class="badge-row">${renderMetaBadges(model)}</div>
-      <div class="credits">
-        ${renderDirectorCredit(model)}
-        ${renderActorCredit(model)}
+    <article class="movie-card${model.posterUrl ? " movie-card--with-poster" : ""}" data-movie-id="${escapeHtml(model.id)}">
+      ${renderMoviePoster(model)}
+      <div class="movie-card__body">
+        <header class="movie-card__header">
+          <div class="movie-card__title-block">${renderMovieTitle(model)}</div>
+          ${renderSelectionButton(model)}
+        </header>
+        <div class="badge-row">${renderMetaBadges(model)}</div>
+        <div class="credits">
+          ${renderDirectorCredit(model)}
+          ${renderActorCredit(model)}
+        </div>
+        <div class="chips">${renderGenreChips(model)}</div>
       </div>
-      <div class="chips">${renderGenreChips(model)}</div>
     </article>`;
 }
 function renderMovieListItem(row) {
   const model = movieViewModel(row);
   return `
-    <article class="movie-card movie-card--list" data-movie-id="${escapeHtml(model.id)}">
-      <div class="movie-list-top">
-        <div class="movie-list-main">
-          ${renderMovieTitle(model)}
-          ${renderDirectorCredit(model, "movie-list-credit")}
+    <article class="movie-card movie-card--list${model.posterUrl ? " movie-card--list-with-poster" : ""}" data-movie-id="${escapeHtml(model.id)}">
+      ${renderMoviePoster(model, "movie-poster--list")}
+      <div class="movie-list-content">
+        <div class="movie-list-top">
+          <div class="movie-list-main">
+            ${renderMovieTitle(model)}
+            ${renderDirectorCredit(model, "movie-list-credit")}
+          </div>
+          <div class="movie-list-action">${renderSelectionButton(model)}</div>
         </div>
-        <div class="movie-list-action">${renderSelectionButton(model)}</div>
-      </div>
-      <div class="movie-list-bottom">
-        <div class="movie-list-meta badge-row">${renderMetaBadges(model)}</div>
-        <div class="movie-list-genres chips">${renderGenreChips(model)}</div>
+        <div class="movie-list-bottom">
+          <div class="movie-list-meta badge-row">${renderMetaBadges(model)}</div>
+          <div class="movie-list-genres chips">${renderGenreChips(model)}</div>
+        </div>
       </div>
     </article>`;
 }
@@ -772,6 +805,11 @@ function highlightList(values, selected) {
   return values
     .map(value => renderCardFilterButton(category, value, "credit-token", "selected-credit"))
     .join(`<span class="credit-separator">, </span>`);
+}
+function handlePosterError(event) {
+  const image = event.target.closest?.(".movie-poster img");
+  if (!image) return;
+  image.closest(".movie-poster")?.remove();
 }
 function renderCardFilterButton(category, value, baseClass, selectedClass) {
   const selected = state.selected[category].has(value);
@@ -1043,6 +1081,9 @@ function bindEvents() {
     }, { passive: false });
   });
 
+  els.movieGrid.addEventListener("error", handlePosterError, true);
+  els.selectionPanel.addEventListener("error", handlePosterError, true);
+
   els.movieGrid.addEventListener("click", event => {
     const selectionButton = event.target.closest("button[data-selection-id]");
     if (selectionButton) {
@@ -1151,6 +1192,8 @@ if (typeof window !== "undefined") {
     matchesFilters,
     matchesList,
     movieUrl,
+    posterUrl,
+    safeImageUrl,
     normalize,
     normalizeSortText,
     optionCounts,

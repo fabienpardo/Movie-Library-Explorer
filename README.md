@@ -1,99 +1,222 @@
-# Explorateur de films
+# Movie Library Explorer
 
-Application statique GitHub Pages pour explorer une bibliothèque de films publiée depuis Google Sheets.
+A zero-build, static web app for exploring a personal movie library exported from a published Google Sheet.
 
-## Fonctionnalités
+The app is designed for GitHub Pages: no backend, no bundler, no runtime dependencies. It loads a CSV file in the browser, detects the relevant movie columns, then provides search, sorting, filters, desktop list view, mobile card view, and a temporary local selection workflow.
 
-- Recherche, tri et filtres par genre, acteur et réalisateur.
-- Mode de correspondance par catégorie : `Au moins un` ou `Tous`.
-- Options de filtres dynamiques : les valeurs sans résultat sont masquées, sauf si elles sont déjà sélectionnées.
-- Mise en évidence des filtres sélectionnés dans les cartes de films.
-- Couleurs IMDb : vert pour `8.0+`, jaune pour `7.0–7.9`, rouge sous `7.0`.
-- Titre du film cliquable vers IMDb quand une colonne URL est disponible.
-- Panneau de filtres mobile et barre latérale desktop.
-- Résumé de résultats sticky pendant l’exploration.
-- Mode cartes/liste sur desktop ; sur mobile, l’affichage reste en cartes.
-- Sélection temporaire persistée localement, avec bouton `+` compact sur les cartes et détails complets consultables dans le panneau de sélection.
-- Icônes favicon, iOS et manifeste incluses.
+## Table of contents
 
-## Lancer en local
+- [What it does](#what-it-does)
+- [Feature overview](#feature-overview)
+- [Quick start](#quick-start)
+- [Project structure](#project-structure)
+- [Data source](#data-source)
+- [Expected columns](#expected-columns)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Browser and device behavior](#browser-and-device-behavior)
+- [Persistence model](#persistence-model)
+- [Maintenance notes](#maintenance-notes)
+- [Known limitations](#known-limitations)
+
+## What it does
+
+Movie Library Explorer turns a movie spreadsheet into a fast browser-based exploration interface.
+
+It is useful when you want to:
+
+- browse a large movie library without opening the spreadsheet;
+- search by title, actor, director, genre, country, or metadata;
+- combine filters with `Tous` / `Au moins un` logic;
+- compare candidate movies through a temporary local selection;
+- use the same app on desktop and iPhone without a backend service.
+
+The user interface is currently in French.
+
+## Feature overview
+
+### Search and filtering
+
+- Global text search.
+- Filters by genre, actor, and director.
+- Per-category match modes:
+  - `Tous`: every selected value in the category must match.
+  - `Au moins un`: at least one selected value in the category must match.
+- Dynamic filter options: values with no result are hidden unless already selected.
+- Filter options sorted by descending result count.
+- Clickable genre, actor, and director chips inside movie cards.
+- Active-filter chips with deterministic category/value removal.
+
+### Sorting
+
+Available sort modes:
+
+- library position, recent first;
+- library position, oldest first;
+- title A → Z;
+- original title A → Z;
+- runtime ascending / descending;
+- IMDb rating descending;
+- release date recent / old;
+- country A → Z.
+
+Title sorting normalizes leading articles, punctuation, accents, and case. For release sorting, `Release Date` is used first when available, with `Year` as fallback.
+
+### Movie cards and list view
+
+- Card view on all devices.
+- Desktop-only list view for denser scanning.
+- Mobile always uses card view; the list/card selector is hidden on small screens.
+- IMDb rating visual classes:
+  - high: `8.0+`;
+  - medium: `7.0–7.9`;
+  - low: below `7.0`.
+- Movie title links to IMDb when a URL/IMDb column is detected.
+- Poster images are displayed in cards when a poster/image-link column is detected.
+- Original title is hidden when it is equivalent to the displayed title after normalization.
+
+### Temporary selection
+
+- Add/remove movies with a compact `+` / `✓` button on cards and list rows.
+- Selection count shown in the toolbar and result summary.
+- Selection panel with removable items.
+- Full movie details can be expanded from the selection panel.
+- Selection persists locally with `localStorage` when available.
+- Legacy persisted selection IDs are reconciled to the current explicit ID format.
+
+### Layout and accessibility
+
+- Compact header.
+- Sticky result summary.
+- Mobile filter panel with dialog-style behavior.
+- Focus trap for the mobile filter panel.
+- `inert` support with fallback handling.
+- Minimum touch target convention based on a `44px` tap target variable.
+- Back-to-top button.
+- PWA-oriented icons and manifest.
+
+## Quick start
+
+From the package root:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Ouvrir `http://localhost:8000`.
+Then open:
 
-## Déployer
+```text
+http://localhost:8000
+```
 
-Déposer les fichiers à la racine du dépôt GitHub Pages. Aucun backend ni build step n’est nécessaire.
+The app is static. Opening `index.html` directly from the filesystem may be blocked by browser CORS rules when the app fetches CSV data. Use a local HTTP server instead.
 
-## Adapter les colonnes
+## Project structure
 
-Si une colonne Google Sheets n’est pas détectée, modifier `columnAliases` en haut de `script.js`.
+```text
+.
+├── index.html                      # App shell
+├── style.css                       # Layout, responsive UI, component styles
+├── script.js                       # CSV loading, data pipeline, rendering, state, interactions
+├── manifest.webmanifest            # PWA metadata
+├── favicon.svg                     # Vector favicon
+├── favicon-16.png                  # PNG favicon
+├── favicon-32.png                  # PNG favicon
+├── apple-touch-icon.png            # iOS home-screen icon
+├── icon-192.png                    # PWA icon
+├── icon-512.png                    # PWA icon
+├── package.json                    # Test scripts only; no runtime dependency
+└── tests
+    ├── README.md
+    ├── fixtures
+    │   └── apple-tv-movies-library-mdb.csv
+    ├── regression.test.js          # Data and logic regression tests
+    ├── static-assets.test.js       # Static integrity and cleanup checks
+    ├── browser-test-utils.js       # Dependency-free Chromium/CDP helpers
+    └── e2e.browser.test.js         # Browser-level E2E scenarios
+```
 
-## Note v7.4
+## Data source
 
-Ajout d’un lien IMDb sur le titre des films quand la colonne URL est disponible dans Google Sheets.
+The production CSV source is configured at the top of `script.js`:
 
-## Note v7.5
+```js
+const PUBLISHED_SHEET_ID = "...";
+const GID = "0";
+const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${GID}&single=true&output=csv`;
+```
 
-Le tri alphabétique des titres ignore les articles initiaux courants, par exemple `Le`, `La`, `Les`, `L’`, `The`, `A` et `An`. Les titres affichés restent inchangés.
+To use another Google Sheet:
 
+1. Publish the relevant sheet tab as CSV.
+2. Replace `PUBLISHED_SHEET_ID` and, if needed, `GID` in `script.js`.
+3. Run the test suite.
+4. Deploy the static files.
 
-## Note v7.6
+The test fixture is separate:
 
-Le tri alphabétique des titres ignore aussi la ponctuation et les symboles de classement, par exemple les points, parenthèses, guillemets et tirets. Les titres affichés restent inchangés.
+```text
+tests/fixtures/apple-tv-movies-library-mdb.csv
+```
 
-## Note v7.7
+It is used only by automated tests or by explicitly enabling fixture mode. The deployed app loads the published Google Sheet by default.
 
-Les filtres utilisent `Tous` par défaut. Les options de chaque filtre sont triées par nombre de résultats décroissant.
+## Expected columns
 
-## Note v7.8
+Column detection is alias-based. If a sheet uses a different header name, update `columnAliases` near the top of `script.js`.
 
-Les genres, acteurs et réalisateurs affichés dans les cartes sont cliquables pour ajouter ou retirer directement le filtre correspondant.
+| Logical field | Supported examples |
+|---|---|
+| Title | `title`, `movie`, `movie title`, `name` |
+| Original title | `original title`, `original name`, `original movie title` |
+| Genres | `genre`, `genres` |
+| Runtime | `runtime`, `runtime min`, `duration`, `running time` |
+| Year | `year`, `release year`, `movie year` |
+| Release date | `release date`, `released`, `premiere date`, `release` |
+| Position | `position`, `library position`, `rank`, `order` |
+| IMDb rating | `imdb rating`, `imdb`, `imdb score` |
+| URL | `url`, `link`, `imdb url`, `imdb link`, `imdb page` |
+| Poster | `poster`, `poster url`, `poster link`, `cover`, `cover url`, `image`, `image url`, `image link`, `affiche` |
+| Country | `country`, `countries`, `production country`, `nationality` |
+| Actors | `actor`, `actors`, `cast`, `stars`, `starring` |
+| Directors | `director`, `directors`, `directed by` |
 
-## Note v7.9
+### Poster-column note
 
-Nettoyage de maintenance : cache léger pour les compteurs de filtres, clarification du comportement tactile iOS, et séparation plus nette entre synchronisation d’accessibilité et changement de taille d’écran.
+Poster images are optional. When a poster/image-link column is detected, cards render the image with lazy loading. Accepted values are `http://`, `https://`, or safe `data:image/...;base64` URLs. Broken image URLs are removed from the rendered card so one bad poster does not block the library.
 
-## Note v8.2
+### Important URL-column note
 
-Le tri par défaut utilise désormais la colonne `Position` en ordre décroissant. Les options de tri incluent aussi `Position` croissante et décroissante. Le tri par année utilise `Release Date` quand la colonne est disponible, avec `Year` comme fallback.
+Persisted selections are most stable when the CSV contains a URL/IMDb column.
 
-- Libellés de tri simplifiés : ajout récent/ancien, durée courte/longue, sortie récente/ancienne.
-- La comparaison `Title` / `Original Title` est normalisée pour éviter les doublons liés aux différences de casse, accents ou ponctuation.
+Movie IDs use this priority:
 
-## Note v8.3
+```text
+url:<normalized IMDb or movie URL>
+fallback:<normalized title>:<year>:<position>
+```
 
-Corrections de cohérence : tri `Year` homogène entre `Release Date` et `Year`, tri `Original Title` basé sur la valeur réelle plutôt que sur le libellé affiché, détection plus sûre de la colonne `Title`, focus clavier visible sur les options de filtre, style conservé au survol des genres sélectionnés, et versions de cache d’icônes alignées.
+Without a URL/IMDb column, the fallback ID can become unstable if the title, year, or position changes in the spreadsheet. The app displays a warning when no URL/IMDb column is detected.
 
-## Note v8.4
+### Runtime assumption
 
-Roadmap d’exploration : hero compact, retrait des anciennes cartes statistiques, résumé sticky des résultats, mode cartes/liste, et sélection temporaire persistée via `localStorage`.
+Bare numeric runtime values are interpreted as minutes. For example:
 
-## Note v8.4.1
+```text
+124 -> 124 minutes
+```
 
-Nettoyage de maintenance : versions de cache alignées, retrait des sélecteurs CSS obsolètes, suppression des règles mobiles inutiles pour l’ancien mode liste, factorisation du rendu des cartes/listes, et séparation des utilitaires de test navigateur.
+This matches the current CSV fixture. If another data source stores runtime in hours or another unit, normalize the source data or adjust `parseRuntime()`.
 
+## Testing
 
-## Note v8.4.2
-
-Nettoyage de robustesse : retrait de la suppression de filtres basée sur un index DOM, identifiants DOM normalisés pour les détails de sélection, test réel d’écriture `localStorage`, avertissement quand la colonne URL/IMDb est absente, documentation de l’identifiant de secours des films et migration des anciens identifiants persistés.
-
-Les sélections sont les plus stables quand le CSV contient une colonne URL/IMDb. Sans cette colonne, l’application utilise un identifiant de secours basé sur le titre, l’année et la position ; une modification de ces valeurs dans la feuille peut rendre une ancienne sélection persistée impossible à retrouver.
-
-## Tests de régression
-
-Le package inclut un fichier CSV de test dans `tests/fixtures/apple-tv-movies-library-mdb.csv`. Ce fichier est destiné uniquement aux tests : l’application continue de charger les données depuis l’URL Google Sheets publiée par défaut.
-
-Lancer tous les scénarios depuis la racine du package :
+The project has three test layers:
 
 ```bash
 npm test
 ```
 
-Lancer une couche précise :
+Equivalent to:
 
 ```bash
 npm run test:unit
@@ -101,14 +224,156 @@ npm run test:assets
 npm run test:e2e
 ```
 
-Les tests sont organisés en trois couches :
+### Unit / regression tests
 
-- `tests/regression.test.js` : logique de données, parsing CSV, détection des colonnes, tris, filtres, durées, classes IMDb et URLs IMDb.
-- `tests/static-assets.test.js` : cohérence des fichiers référencés par `index.html`, le manifeste, les versions de cache et les hooks CSS de la roadmap.
-- `tests/e2e.browser.test.js` : scénarios navigateur avec Chromium, sans dépendance externe. Les helpers CDP sont isolés dans `tests/browser-test-utils.js`. Les scénarios couvrent le rendu, la recherche, les filtres, les chips cliquables, les tris, le résumé sticky, l’affichage liste desktop, le mode cartes forcé sur mobile, la sélection temporaire, l’erreur de chargement et les comportements mobiles critiques.
+```bash
+npm run test:unit
+```
 
-Pour les tests navigateur, Chromium doit être disponible. Si nécessaire :
+Covers:
+
+- CSV parsing;
+- column detection;
+- default `Position desc` sorting;
+- title normalization;
+- duplicate original-title hiding;
+- `Release Date` sorting with `Year` fallback;
+- `Tous` vs `Au moins un` filter logic;
+- filter option counts;
+- runtime parsing and formatting;
+- IMDb rating classes;
+- IMDb URL validation;
+- movie ID generation and legacy ID reconciliation;
+- missing URL-column warning;
+- selection state independence from active filters;
+- safe DOM ID generation;
+- poster URL detection and sanitization.
+
+### Static asset and cleanup tests
+
+```bash
+npm run test:assets
+```
+
+Covers:
+
+- local asset references in `index.html`;
+- manifest icon references;
+- cache-busting version alignment;
+- absence of removed features such as density settings and old stat-card CSS;
+- mobile card-only CSS expectations;
+- presence of roadmap and robustness hooks;
+- fixture isolation under `tests/fixtures`.
+
+### Browser E2E tests
+
+```bash
+npm run test:e2e
+```
+
+Covers the app as a user would experience it in Chromium:
+
+- fixture library rendering;
+- search and clear behavior;
+- genre filtering;
+- card chip filter toggling;
+- sorting;
+- sticky result summary;
+- desktop card/list mode switching;
+- mobile card-only behavior;
+- temporary selection add/review/remove/clear;
+- failed reload cleanup;
+- mobile filter dialog behavior;
+- mobile actor-search first-touch selection.
+
+The E2E runner is dependency-free and talks to Chromium through the Chrome DevTools Protocol.
+
+If Chromium is not installed in a standard path:
 
 ```bash
 CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 ```
+
+## Deployment
+
+This app is intended to be deployed as static files, for example with GitHub Pages.
+
+### GitHub Pages deployment
+
+1. Commit the app files at the repository root.
+2. In GitHub, open the repository settings.
+3. Enable GitHub Pages for the relevant branch and root folder.
+4. Wait for GitHub Pages to publish the site.
+
+No build command is required.
+
+### Cache-busting rule
+
+When deploying a version that changes CSS, JavaScript, icons, or manifest references, bump all `?v=` query strings together.
+
+Current version:
+
+```text
+8.4.2
+```
+
+The static test suite verifies that cache-busting versions stay aligned.
+
+## Browser and device behavior
+
+### Desktop
+
+- Filter panel is available as a sidebar.
+- Display mode selector allows `Cartes` or `Liste`.
+- Sticky result summary remains visible during exploration.
+
+### Mobile
+
+- The app always renders cards.
+- The card/list selector is hidden.
+- Filters open in a dialog-style panel.
+- The panel can be closed through the close button, backdrop behavior, or `Escape` in browser tests.
+- Selection button is compact and positioned at the top-right of cards.
+
+## Persistence model
+
+The app uses `localStorage` for:
+
+- selected display mode on desktop;
+- temporary movie selection.
+
+The storage guard performs a real write/remove probe. If `localStorage` is unavailable or blocked, the app still works, but persisted preferences and selections may not survive reloads.
+
+No server-side persistence is used.
+
+## Maintenance notes
+
+### Test hooks
+
+`script.js` exposes `window.__MovieExplorerTestHooks` for test access. This keeps the app dependency-free while allowing direct regression tests against parsing, sorting, filtering, selection, and rendering helpers.
+
+### Column aliases
+
+When adding a new data source, prefer updating `columnAliases` rather than changing the parsing pipeline.
+
+### Rendering helpers
+
+Card and list rendering share helper functions for title, metadata, genres, credits, and selection controls. When changing card content, check both display modes and selection detail rendering.
+
+### Selection panel behavior
+
+Selection detail expansion is tied to selected movie IDs, not to the currently filtered result grid. A selected movie can remain expandable even when active filters hide it from the main result list.
+
+### Option-count cache
+
+Filter option counts use a conservative cache key. This favors correctness over maximum cache reuse. Optimize only if count recalculation becomes visibly slow on a larger library.
+
+## Known limitations
+
+- The app depends on the published CSV being reachable from the browser.
+- The UI is currently French-only.
+- Runtime parsing treats bare numbers as minutes.
+- Persisted selection is less stable when no URL/IMDb column exists.
+- Poster display depends on direct image URLs; pages that contain an image are not the same as image-file URLs.
+- The browser E2E layer requires a local Chromium installation.
+- There is no backend, account system, or cross-device synchronization.
