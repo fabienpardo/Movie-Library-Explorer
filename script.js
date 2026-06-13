@@ -22,7 +22,9 @@ const columnAliases = {
   poster: ["poster", "poster url", "poster link", "cover", "cover url", "cover link", "image", "image url", "image link", "affiche", "affiche url", "affiche link"],
   country: ["country", "countries", "production country", "production countries", "main country", "origin country", "country of origin", "nationality"],
   actors: ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"],
-  directors: ["director", "directors", "directed by"]
+  directors: ["director", "directors", "directed by"],
+  saga: ["saga", "saga name", "saga title", "franchise", "franchise name", "collection", "series", "serie", "saga collection"],
+  sagaOrder: ["saga order", "saga number", "saga index", "saga rank", "saga position", "franchise order", "order in saga", "part number", "chapter number"]
 };
 
 const categories = {
@@ -59,7 +61,7 @@ const state = {
   sort: "position-desc",
   filterSearch: { actor: "", director: "" },
   matchMode: { ...DEFAULT_MATCH_MODE },
-  selected: { genre: new Set(), actor: new Set(), director: new Set() },
+  selected: { genre: new Set(), actor: new Set(), director: new Set(), saga: new Set() },
   selection: new Set(),
   selectionPanelOpen: false,
   selectionDetailId: "",
@@ -67,7 +69,8 @@ const state = {
   filtersOpen: false,
   lastFocus: null,
   backToTopVisible: null,
-  optionCountsCache: new Map()
+  optionCountsCache: new Map(),
+  sagaTotalsCache: null
 };
 
 function byId(id) { return document.getElementById(id); }
@@ -270,7 +273,9 @@ function detectColumns(labels) {
       poster: pick(columnAliases.poster),
       country: pick(columnAliases.country),
       actors: pick(columnAliases.actors),
-      directors: pick(columnAliases.directors)
+      directors: pick(columnAliases.directors),
+      saga: pick(columnAliases.saga),
+      sagaOrder: pick(columnAliases.sagaOrder)
     },
     warnings
   };
@@ -375,6 +380,31 @@ function movieUrl(row) {
 function posterUrl(row) {
   return safeImageUrl(cell(row, "poster"));
 }
+function sagaName(row) { return cell(row, "saga").trim(); }
+function sagaOrder(row) {
+  const order = parseNumber(cell(row, "sagaOrder"));
+  return Number.isFinite(order) ? order : null;
+}
+function sagaTotals() {
+  // Total per saga is the highest order seen among its movies. Cached because it scans every row and only changes on reload.
+  if (state.sagaTotalsCache) return state.sagaTotalsCache;
+
+  const totals = new Map();
+  if (state.columns.saga) {
+    for (const row of state.rows) {
+      const key = normalize(sagaName(row));
+      if (!key) continue;
+      const order = sagaOrder(row);
+      totals.set(key, Math.max(totals.get(key) || 0, Number.isFinite(order) ? order : 0));
+    }
+  }
+  state.sagaTotalsCache = totals;
+  return totals;
+}
+function sagaTotal(row) {
+  const name = sagaName(row);
+  return name ? (sagaTotals().get(normalize(name)) || 0) : 0;
+}
 
 function encodeFilterValue(value) {
   // Card filter values live in data attributes, so encode them before insertion and decode them on click.
@@ -388,8 +418,9 @@ function decodeFilterValue(value) {
   }
 }
 function filterToggleLabel(category, value) {
+  const label = category === "saga" ? "saga" : categories[category].label.toLowerCase();
   const action = state.selected[category].has(value) ? "Retirer" : "Ajouter";
-  return `${action} le filtre ${categories[category].label.toLowerCase()} ${value}`;
+  return `${action} le filtre ${label} ${value}`;
 }
 
 function clearOptionCountsCache() {
@@ -399,6 +430,7 @@ function clearOptionCountsCache() {
 function resetData() {
   Object.assign(state, { rows: [], labels: [], columns: {}, warnings: [] });
   clearOptionCountsCache();
+  state.sagaTotalsCache = null;
 }
 function resetFilters() {
   Object.assign(state, {
@@ -414,10 +446,25 @@ function syncControls() {
   els.searchInput.value = state.search;
   els.sortSelect.value = state.sort;
   for (const category of categoryKeys) {
-    byId(`${category}MatchMode`).value = state.matchMode[category];
+    syncMatchMode(category);
     const searchId = categories[category].searchId;
     if (searchId) els[searchId].value = state.filterSearch[category] || "";
   }
+}
+function updateFilterResultCount(count) {
+  const el = byId("filterResultCount");
+  if (!el) return;
+  const total = state.rows.length;
+  el.textContent = total ? `${count} ${count > 1 ? "films" : "film"} sur ${total}` : "";
+}
+function syncMatchMode(category) {
+  const group = byId(`${category}MatchMode`);
+  if (!group) return;
+  group.querySelectorAll("[data-match-value]").forEach(option => {
+    const active = option.dataset.matchValue === state.matchMode[category];
+    option.classList.toggle("is-active", active);
+    option.setAttribute("aria-pressed", String(active));
+  });
 }
 function resetAfterLoadFailure() {
   resetData();
@@ -456,6 +503,7 @@ async function loadSheet() {
     cardNodeCache.clear();
     // The counts cache key omits rows/columns, so invalidate it whenever a new dataset is loaded.
     clearOptionCountsCache();
+    state.sagaTotalsCache = null;
     reconcilePersistedSelection(usableRows, detected.columns);
 
     renderDiagnostics();
@@ -514,8 +562,15 @@ function rowSearchText(row) {
   return row.__searchText;
 }
 function matchesSearch(row) { return !state.search || rowSearchText(row).includes(normalize(state.search)); }
+function matchesSaga(row) {
+  // Single-valued filter set by clicking a franchise badge; a movie matches when its saga is one of the selected ones.
+  const selected = state.selected.saga;
+  if (!selected || !selected.size) return true;
+  const name = sagaName(row);
+  return name ? selected.has(name) : false;
+}
 function matchesFilters(row, skipCategory = null) {
-  return matchesSearch(row) && categoryKeys.every(category => (
+  return matchesSearch(row) && matchesSaga(row) && categoryKeys.every(category => (
     category === skipCategory || matchesList(listFor(row, category), state.selected[category], state.matchMode[category])
   ));
 }
@@ -690,7 +745,9 @@ function renderResultSummary(rows) {
 // Single source of truth for the layout: list on desktop, cards on mobile.
 // Driven entirely by the viewport — there is no user-facing toggle.
 function effectiveViewMode() {
-  return DESKTOP_QUERY.matches ? "list" : "cards";
+  // The editorial card grid is the experience on every breakpoint; the list view
+  // is retained only as latent markup/styles (not user-reachable).
+  return "cards";
 }
 function syncDisplaySettings() {
   const mode = effectiveViewMode();
@@ -706,6 +763,7 @@ function render() {
   els.status.hidden = true;
   syncDisplaySettings();
   renderResultSummary(rows);
+  updateFilterResultCount(rows.length);
   renderActiveFilters();
   renderFilterLists();
   syncSelectionCount();
@@ -822,7 +880,10 @@ function movieViewModel(row) {
     country: mainCountry(cell(row, "country")),
     genres: listFor(row, "genre"),
     actors: listFor(row, "actor"),
-    directors: listFor(row, "director")
+    directors: listFor(row, "director"),
+    saga: sagaName(row),
+    sagaOrder: sagaOrder(row),
+    sagaTotal: sagaTotal(row)
   };
 }
 function posterInitials(title) {
@@ -887,24 +948,83 @@ function renderSelectionButton(rowOrModel) {
   const symbol = selected ? "✓" : "+";
   return `<button class="selection-toggle${selected ? " is-selected" : ""}" type="button" data-selection-id="${escapeHtml(id)}" aria-pressed="${selected}" aria-label="${label}" title="${label}"><span aria-hidden="true">${symbol}</span></button>`;
 }
+function renderFranchiseBadge(model) {
+  if (!model.saga) return "";
+  const order = Number.isFinite(model.sagaOrder) ? model.sagaOrder : null;
+  const total = model.sagaTotal > 0 ? model.sagaTotal : null;
+  const suffix = order && total ? ` · ${order} / ${total}` : order ? ` · ${order}` : "";
+  const selected = (state.selected.saga || new Set()).has(model.saga);
+  const classes = ["franchise-badge", "card-filter-button", selected ? "franchise-badge--selected" : ""].filter(Boolean).join(" ");
+  // Clicking filters the library to this saga (toggled via the shared card-filter handler).
+  return `<button class="${classes}" type="button" data-card-filter-category="saga" data-card-filter-value="${encodeFilterValue(model.saga)}" aria-pressed="${selected}" aria-label="${escapeHtml(filterToggleLabel("saga", model.saga))}">${escapeHtml(model.saga)}${escapeHtml(suffix)}</button>`;
+}
+function renderImdbBadge(model) {
+  if (!model.rating) return "";
+  return `
+    <span class="imdb-badge ${ratingClass(model.rating)}">
+      <span class="imdb-dot" aria-hidden="true"></span>
+      <span class="imdb-badge__value">IMDb ${escapeHtml(model.rating)}</span>
+    </span>`;
+}
+function renderCardMeta(model) {
+  const sep = `<span class="meta-sep" aria-hidden="true">·</span>`;
+  const facts = [
+    model.year ? `<span class="meta-item meta-item--year">${escapeHtml(model.year)}</span>` : "",
+    `<span class="meta-item">${escapeHtml(formatRuntime(model.runtime))}</span>`,
+    model.country ? `<span class="meta-item">${escapeHtml(model.country)}</span>` : ""
+  ].filter(Boolean);
+  const badge = renderImdbBadge(model);
+  const tail = facts.join(sep);
+  return `<div class="meta-row">${badge}${badge && tail ? sep : ""}${tail}</div>`;
+}
+function renderCreditGroup(label, values, selected) {
+  if (!values.length) return "";
+  return `
+    <div class="credit-group">
+      <div class="credit-label">${escapeHtml(label)}</div>
+      <div class="credit-value">${highlightList(values, selected)}</div>
+    </div>`;
+}
+function renderCardCredits(model) {
+  const director = renderCreditGroup("Réalisation", model.directors, state.selected.director);
+  const actors = renderCreditGroup("Acteurs", model.actors, state.selected.actor);
+  return director || actors ? `<div class="card-credits credits">${director}${actors}</div>` : "";
+}
+function renderCardBanner(model) {
+  const url = model.posterUrl;
+  const img = url && !failedPosters.has(url)
+    ? `<img class="card-banner__img" src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async" aria-hidden="true">`
+    : "";
+  return `
+    <div class="card-banner">
+      ${img}
+      <div class="card-banner__scrim" aria-hidden="true"></div>
+      ${renderFranchiseBadge(model)}
+      ${renderSelectionButton(model)}
+    </div>`;
+}
+// Only the body re-renders on filter/sort changes (see updateCardContent), so the
+// filter-sensitive credits and genre tags live here while the poster, title and
+// franchise badge stay in the persistent wrapper.
 function renderMovieCardBody(model) {
   return `
-    <header class="movie-card__header">
-      <div class="movie-card__title-block">${renderMovieTitle(model)}</div>
-      ${renderSelectionButton(model)}
-    </header>
-    <div class="badge-row">${renderMetaBadges(model)}</div>
-    <div class="credits">
-      ${renderDirectorCredit(model)}
-      ${renderActorCredit(model)}
-    </div>
-    <div class="chips">${renderGenreChips(model)}</div>`;
+    ${renderCardMeta(model)}
+    <div class="card-divider" aria-hidden="true"></div>
+    ${renderCardCredits(model)}
+    <div class="card-genres chips">${renderGenreChips(model)}</div>`;
 }
 function renderMovieCard(row) {
   const model = movieViewModel(row);
+  const thumb = model.posterUrl
+    ? renderMoviePoster(model, "card-thumb")
+    : `<figure class="movie-poster card-thumb card-thumb--empty" aria-hidden="true"></figure>`;
   return `
-    <article class="movie-card${model.posterUrl ? " movie-card--with-poster" : ""}" data-movie-id="${escapeHtml(model.id)}">
-      ${renderMoviePoster(model)}
+    <article class="movie-card movie-card--media${model.posterUrl ? " movie-card--with-poster" : ""}" data-movie-id="${escapeHtml(model.id)}">
+      ${renderCardBanner(model)}
+      <div class="card-seam">
+        ${thumb}
+        <div class="card-title-block movie-card__title-block">${renderMovieTitle(model)}</div>
+      </div>
       <div class="movie-card__body">${renderMovieCardBody(model)}</div>
     </article>`;
 }
@@ -948,6 +1068,16 @@ function highlightList(values, selected) {
     .join(" ");
 }
 function handlePosterError(event) {
+  // The decorative banner image is not inside a .movie-poster figure: drop it so
+  // the gradient backdrop shows, and remember the failure for re-created cards.
+  const banner = event.target.closest?.(".card-banner__img");
+  if (banner) {
+    const url = banner.getAttribute("src");
+    if (url) failedPosters.add(url);
+    banner.remove();
+    return;
+  }
+
   const image = event.target.closest?.(".movie-poster img");
   if (!image) return;
   const figure = image.closest(".movie-poster");
@@ -1074,6 +1204,7 @@ function renderSelectionPanel() {
 function activeFilters() {
   return [
     ...(state.search ? [{ group: "Recherche", category: "search", value: state.search }] : []),
+    ...[...(state.selected.saga || [])].map(value => ({ group: "Saga", category: "saga", value })),
     ...categoryKeys.flatMap(category => [...state.selected[category]].map(value => ({ group: categories[category].label, category, value })))
   ];
 }
@@ -1230,7 +1361,17 @@ function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
   els.toggleSelectionPanel.addEventListener("click", toggleSelectionPanel);
-  categoryKeys.forEach(category => byId(`${category}MatchMode`).addEventListener("change", event => { state.matchMode[category] = event.target.value; render(); }));
+  categoryKeys.forEach(category => {
+    const group = byId(`${category}MatchMode`);
+    group.addEventListener("click", event => {
+      const option = event.target.closest("[data-match-value]");
+      if (!option || !group.contains(option)) return;
+      if (state.matchMode[category] === option.dataset.matchValue) return;
+      state.matchMode[category] = option.dataset.matchValue;
+      syncMatchMode(category);
+      render();
+    });
+  });
 
   searchableCategories.forEach(category => {
     const input = els[categories[category].searchId];
@@ -1369,7 +1510,11 @@ if (typeof window !== "undefined") {
     matchesFilters,
     matchesList,
     movieUrl,
+    movieViewModel,
     posterUrl,
+    sagaName,
+    sagaOrder,
+    sagaTotal,
     safeImageUrl,
     normalize,
     normalizeSortText,

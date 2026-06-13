@@ -100,7 +100,31 @@ test("uploaded fixture columns are detected by aliases", () => {
   assert.equal(detected.columns.directors, "Directors");
   assert.equal(detected.columns.actors, "Main actors");
   assert.equal(detected.columns.country, "Country");
+  assert.equal(detected.columns.saga, "Saga name");
+  assert.equal(detected.columns.sagaOrder, "Saga order");
   assert.equal(detected.warnings.length, 0);
+});
+
+test("saga totals derive from the highest order within each saga", () => {
+  const h = loadAppHooks();
+  const { labels, rows } = h.csvToTable(fs.readFileSync(fixturePath, "utf8"));
+  const { columns } = h.detectColumns(labels);
+  resetState(h, labels, rows, columns);
+
+  const endgame = rows.find(row => row.Title === "Avengers: Endgame");
+  assert.equal(h.sagaName(endgame), "Avengers");
+  assert.equal(h.sagaOrder(endgame), 4);
+  assert.equal(h.sagaTotal(endgame), 4);
+
+  const firstAvenger = rows.find(row => row.Title === "Avengers");
+  assert.equal(h.sagaOrder(firstAvenger), 1);
+  // Total is shared across the saga: order 1 of 4, not 1 of 1.
+  assert.equal(h.sagaTotal(firstAvenger), 4);
+
+  const standalone = rows.find(row => row.Title === "60 secondes chrono");
+  assert.equal(h.sagaName(standalone), "");
+  assert.equal(h.sagaOrder(standalone), null);
+  assert.equal(h.sagaTotal(standalone), 0);
 });
 
 test("default position-desc sorting keeps the newest library positions first", () => {

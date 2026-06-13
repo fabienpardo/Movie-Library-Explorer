@@ -33,7 +33,9 @@ test('loads the fixture and renders the library without browser errors', async (
     firstPosterSrc: document.querySelector('.movie-card .movie-poster img')?.getAttribute('src'),
     posterCount: document.querySelectorAll('.movie-card .movie-poster img').length,
     gridMode: document.querySelector('#movieGrid').dataset.viewMode,
-    hasListPosterCard: Boolean(document.querySelector('.movie-card.movie-card--list-with-poster'))
+    hasMediaCard: Boolean(document.querySelector('.movie-card.movie-card--media')),
+    hasCardWithPoster: Boolean(document.querySelector('.movie-card.movie-card--with-poster')),
+    hasFranchiseBadge: document.querySelectorAll('.franchise-badge').length
   }));
 
   assert.equal(snapshot.cards, 511);
@@ -47,8 +49,10 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.equal(snapshot.selectionButtonPosition, 'absolute');
   assert.equal(snapshot.cardPosition, 'relative');
   assert.ok(snapshot.posterCount >= 1);
-  assert.equal(snapshot.gridMode, 'list');
-  assert.equal(snapshot.hasListPosterCard, true);
+  assert.equal(snapshot.gridMode, 'cards');
+  assert.equal(snapshot.hasMediaCard, true);
+  assert.equal(snapshot.hasCardWithPoster, true);
+  assert.ok(snapshot.hasFranchiseBadge >= 1);
   assert.match(snapshot.firstPosterSrc, /^https:\/\//);
 });
 
@@ -90,6 +94,27 @@ test('genre checkbox selection updates cards, count badges and selected chips', 
   assert.equal(snapshot.allCardsHaveAction, true);
 });
 
+test('the segmented match toggle switches between "all" and "any" matching', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await clickFilterOptionByLabel(page, '#genreList', 'Action');
+  await clickFilterOptionByLabel(page, '#genreList', 'Comédie');
+  await waitForExpression(page, `window.__MovieExplorerTestHooks.state.selected.genre.size === 2`, 'two genres selected');
+
+  const allCount = await evaluate(page, `window.__MovieExplorerTestHooks.filteredRows().length`);
+
+  // Switch to "Au moins un" (any) — should broaden the result set.
+  await click(page, '#genreMatchMode [data-match-value="any"]');
+  await waitForExpression(page, `window.__MovieExplorerTestHooks.state.matchMode.genre === 'any'`, 'match mode any');
+  const snapshot = await evaluateFunction(page, () => ({
+    anyActive: document.querySelector('#genreMatchMode [data-match-value="any"]').classList.contains('is-active'),
+    allActive: document.querySelector('#genreMatchMode [data-match-value="all"]').classList.contains('is-active'),
+    anyCount: window.__MovieExplorerTestHooks.filteredRows().length
+  }));
+  assert.equal(snapshot.anyActive, true);
+  assert.equal(snapshot.allActive, false);
+  assert.ok(snapshot.anyCount > allCount, '"any" should match at least as many films as "all"');
+});
+
 test('card filter buttons toggle a filter on and off', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   const chipValue = await evaluateFunction(page, () => {
@@ -105,6 +130,31 @@ test('card filter buttons toggle a filter on and off', async ({ browserWsUrl }) 
   await click(page, 'button[data-card-filter-category="genre"]');
   await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 0`, 'chip filter to be removed');
   assert.equal(await evaluate(page, `document.querySelector('#activeFilters').textContent.trim()`), '');
+});
+
+test('clicking a franchise badge filters the library to that saga', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  const saga = await evaluateFunction(page, () => {
+    const badge = document.querySelector('.franchise-badge[data-card-filter-category="saga"]');
+    if (!badge) throw new Error('No franchise badge found');
+    badge.click();
+    return decodeURIComponent(badge.dataset.cardFilterValue);
+  });
+  await waitForExpression(page, `document.querySelector('#activeFilters').textContent.includes('Saga: ${saga}')`, 'saga filter active');
+
+  const snapshot = await evaluateFunction(page, (sagaName) => ({
+    filterCount: document.querySelector('#filterCount').textContent.trim(),
+    cards: document.querySelectorAll('.movie-card--media').length,
+    allSameSaga: [...document.querySelectorAll('.movie-card--media .franchise-badge')]
+      .every(b => b.textContent.startsWith(sagaName))
+  }), saga);
+  assert.equal(snapshot.filterCount, '1');
+  assert.ok(snapshot.cards > 0);
+  assert.equal(snapshot.allSameSaga, true);
+
+  // Removing the active-filter chip clears the saga filter.
+  await click(page, 'button[data-filter-category="saga"]');
+  await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 0`, 'saga filter removed');
 });
 
 test('sort selector changes the first rendered card consistently with app sorting logic', async ({ browserWsUrl }) => {
@@ -143,30 +193,30 @@ test('sticky result summary tracks filters, sort and selection count', async ({ 
   assert.equal(snapshot.className, 'result-summary');
 });
 
-test('desktop renders list view automatically with no display-mode selector', async ({ browserWsUrl }) => {
+test('desktop renders the editorial card grid automatically with no display-mode selector', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   await clickFilterOptionByLabel(page, '#genreList', 'Action');
   await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 1`, 'one active filter');
-  await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'list' && document.querySelector('.movie-card--list')`, 'list view');
+  await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'cards' && document.querySelector('.movie-card--media')`, 'card grid');
 
-  const listSnapshot = await evaluateFunction(page, () => ({
+  const cardSnapshot = await evaluateFunction(page, () => ({
     mode: document.querySelector('#movieGrid').dataset.viewMode,
     effectiveMode: window.__MovieExplorerTestHooks.effectiveViewMode(),
     activeCount: window.__MovieExplorerTestHooks.activeCount(),
+    mediaRows: document.querySelectorAll('.movie-card--media').length,
     listRows: document.querySelectorAll('.movie-card--list').length,
-    cardOnlyRows: document.querySelectorAll('.movie-card--with-poster').length,
-    structuredRows: document.querySelectorAll('.movie-card--list .movie-list-top + .movie-list-bottom').length,
-    listPosterRows: document.querySelectorAll('.movie-card--list-with-poster .movie-poster--list img').length,
+    seamRows: document.querySelectorAll('.movie-card--media .card-banner + .card-seam + .movie-card__body').length,
+    thumbPosterRows: document.querySelectorAll('.movie-card--media .card-thumb img').length,
     selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
-  assert.equal(listSnapshot.mode, 'list');
-  assert.equal(listSnapshot.effectiveMode, 'list');
-  assert.equal(listSnapshot.activeCount, 1);
-  assert.ok(listSnapshot.listRows > 0);
-  assert.equal(listSnapshot.cardOnlyRows, 0);
-  assert.equal(listSnapshot.structuredRows, listSnapshot.listRows);
-  assert.ok(listSnapshot.listPosterRows >= 1);
-  assert.equal(listSnapshot.selectorExists, false);
+  assert.equal(cardSnapshot.mode, 'cards');
+  assert.equal(cardSnapshot.effectiveMode, 'cards');
+  assert.equal(cardSnapshot.activeCount, 1);
+  assert.ok(cardSnapshot.mediaRows > 0);
+  assert.equal(cardSnapshot.listRows, 0);
+  assert.equal(cardSnapshot.seamRows, cardSnapshot.mediaRows);
+  assert.ok(cardSnapshot.thumbPosterRows >= 1);
+  assert.equal(cardSnapshot.selectorExists, false);
 });
 
 test('mobile renders card view automatically with no display-mode selector', async ({ browserWsUrl }) => {
@@ -211,7 +261,7 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   await waitForExpression(page, `document.querySelector('#selectionPanel .selection-detail .movie-card')`, 'selection detail card');
   const detailSnapshot = await evaluateFunction(page, () => ({
     hasFullCard: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-card')),
-    hasActors: document.querySelector('#selectionPanel .selection-detail .actors-line')?.textContent.length > 0,
+    hasActors: document.querySelector('#selectionPanel .selection-detail .card-credits')?.textContent.length > 0,
     hasPoster: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-poster img')),
     expanded: document.querySelector('button[data-selection-detail-id]')?.getAttribute('aria-expanded'),
     summaryFocused: document.activeElement === document.querySelector('button[data-selection-detail-id]')
