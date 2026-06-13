@@ -1165,7 +1165,8 @@ body.filters-open .back-to-top, .back-to-top[hidden] { display: none; }
   left: 12px;
   z-index: 2;
   min-height: 0;
-  max-width: calc(100% - 56px);
+  /* Reserve room for the + button at top-right so the badge never crowds it. */
+  max-width: calc(100% - 68px);
   padding: 4px 10px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 6px;
@@ -1330,7 +1331,13 @@ body.filters-open .back-to-top, .back-to-top[hidden] { display: none; }
 .movie-card--media .credit-value .credit-item { display: block; white-space: normal; margin-top: 6px; }
 .movie-card--media .credit-value .credit-item:first-child { margin-top: 0; }
 .movie-card--media .credit-value .credit-separator { display: none; }
-.movie-card--media .credit-token { color: var(--c-sub); }
+/* Credit names are inline text filters, not tap targets: drop the 44px min-height
+   so stacked names sit on tight lines instead of tall 44px blocks. */
+.movie-card--media .credit-token {
+  min-height: 0;
+  display: inline;
+  color: var(--c-sub);
+}
 .movie-card--media .credit-token:hover { color: var(--c-ink); }
 .movie-card--media .selected-credit {
   display: inline-block;
@@ -1396,4 +1403,115 @@ body.filters-open .back-to-top, .back-to-top[hidden] { display: none; }
   background: var(--c-gold);
   color: var(--on-accent);
   font-size: 16px;
+}
+
+/* ─────────────────────────────────────────────
+   Filter panel redesign — live count, tab counts,
+   segmented match toggle, inline search.
+   ───────────────────────────────────────────── */
+.filter-panel__count {
+  margin: 2px 0 0;
+  padding: 0 2px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.filter-panel__count:empty { display: none; }
+
+.filter-hint {
+  margin: 0 0 14px;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.filter-hint strong { color: var(--muted); font-weight: 750; }
+
+/* Category tabs carry a gold count chip when that category has selections. */
+.filter-jump-nav__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+}
+.filter-jump-nav__button > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filter-jump-nav__count {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
+}
+.filter-jump-nav__button.is-active .filter-jump-nav__count {
+  background: var(--on-accent);
+  color: var(--accent);
+}
+/* The class sets display, so re-assert the hidden state when count is zero. */
+.filter-jump-nav__count[hidden] { display: none; }
+
+/* Toolbar row holding the match toggle and (for people) the search field. */
+.filter-section__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.match-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--soft);
+}
+.match-toggle__option {
+  min-height: 0;
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.match-toggle__option.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.filter-section__bar input[type="search"] {
+  flex: 1 1 150px;
+  min-width: 0;
+  min-height: 40px;
+}
+
+/* Clear / reload actions, separated from the option lists. */
+.filter-panel__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* In the narrow desktop rail, let tabs size to their label and wrap rather than
+   truncate inside three equal columns. */
+@media (min-width: 760px) {
+  .filter-jump-nav { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filter-jump-nav__button { flex: 0 1 auto; padding-inline: 12px; }
 }

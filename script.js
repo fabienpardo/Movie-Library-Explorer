@@ -446,10 +446,25 @@ function syncControls() {
   els.searchInput.value = state.search;
   els.sortSelect.value = state.sort;
   for (const category of categoryKeys) {
-    byId(`${category}MatchMode`).value = state.matchMode[category];
+    syncMatchMode(category);
     const searchId = categories[category].searchId;
     if (searchId) els[searchId].value = state.filterSearch[category] || "";
   }
+}
+function updateFilterResultCount(count) {
+  const el = byId("filterResultCount");
+  if (!el) return;
+  const total = state.rows.length;
+  el.textContent = total ? `${count} ${count > 1 ? "films" : "film"} sur ${total}` : "";
+}
+function syncMatchMode(category) {
+  const group = byId(`${category}MatchMode`);
+  if (!group) return;
+  group.querySelectorAll("[data-match-value]").forEach(option => {
+    const active = option.dataset.matchValue === state.matchMode[category];
+    option.classList.toggle("is-active", active);
+    option.setAttribute("aria-pressed", String(active));
+  });
 }
 function resetAfterLoadFailure() {
   resetData();
@@ -748,6 +763,7 @@ function render() {
   els.status.hidden = true;
   syncDisplaySettings();
   renderResultSummary(rows);
+  updateFilterResultCount(rows.length);
   renderActiveFilters();
   renderFilterLists();
   syncSelectionCount();
@@ -1345,7 +1361,17 @@ function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
   els.toggleSelectionPanel.addEventListener("click", toggleSelectionPanel);
-  categoryKeys.forEach(category => byId(`${category}MatchMode`).addEventListener("change", event => { state.matchMode[category] = event.target.value; render(); }));
+  categoryKeys.forEach(category => {
+    const group = byId(`${category}MatchMode`);
+    group.addEventListener("click", event => {
+      const option = event.target.closest("[data-match-value]");
+      if (!option || !group.contains(option)) return;
+      if (state.matchMode[category] === option.dataset.matchValue) return;
+      state.matchMode[category] = option.dataset.matchValue;
+      syncMatchMode(category);
+      render();
+    });
+  });
 
   searchableCategories.forEach(category => {
     const input = els[categories[category].searchId];

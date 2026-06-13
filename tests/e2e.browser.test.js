@@ -94,6 +94,27 @@ test('genre checkbox selection updates cards, count badges and selected chips', 
   assert.equal(snapshot.allCardsHaveAction, true);
 });
 
+test('the segmented match toggle switches between "all" and "any" matching', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await clickFilterOptionByLabel(page, '#genreList', 'Action');
+  await clickFilterOptionByLabel(page, '#genreList', 'Comédie');
+  await waitForExpression(page, `window.__MovieExplorerTestHooks.state.selected.genre.size === 2`, 'two genres selected');
+
+  const allCount = await evaluate(page, `window.__MovieExplorerTestHooks.filteredRows().length`);
+
+  // Switch to "Au moins un" (any) — should broaden the result set.
+  await click(page, '#genreMatchMode [data-match-value="any"]');
+  await waitForExpression(page, `window.__MovieExplorerTestHooks.state.matchMode.genre === 'any'`, 'match mode any');
+  const snapshot = await evaluateFunction(page, () => ({
+    anyActive: document.querySelector('#genreMatchMode [data-match-value="any"]').classList.contains('is-active'),
+    allActive: document.querySelector('#genreMatchMode [data-match-value="all"]').classList.contains('is-active'),
+    anyCount: window.__MovieExplorerTestHooks.filteredRows().length
+  }));
+  assert.equal(snapshot.anyActive, true);
+  assert.equal(snapshot.allActive, false);
+  assert.ok(snapshot.anyCount > allCount, '"any" should match at least as many films as "all"');
+});
+
 test('card filter buttons toggle a filter on and off', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   const chipValue = await evaluateFunction(page, () => {
