@@ -48,7 +48,7 @@ test('cache-busting versions are aligned with the current package version', () =
   const manifest = fs.readFileSync(path.join(rootDir, 'manifest.webmanifest'), 'utf8');
   const versionMatches = [...`${indexHtml}\n${manifest}`.matchAll(/\?v=([^\"']+)/g)].map(match => match[1]);
   assert.ok(versionMatches.length >= 6, 'cache-busted asset references should be present');
-  assert.deepEqual([...new Set(versionMatches)], ['8.6.1']);
+  assert.deepEqual([...new Set(versionMatches)], ['8.7.0']);
 });
 
 test('removed UI features and fragile selectors do not leave obsolete code paths', () => {
