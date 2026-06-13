@@ -111,6 +111,31 @@ test('card filter buttons toggle a filter on and off', async ({ browserWsUrl }) 
   assert.equal(await evaluate(page, `document.querySelector('#activeFilters').textContent.trim()`), '');
 });
 
+test('clicking a franchise badge filters the library to that saga', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  const saga = await evaluateFunction(page, () => {
+    const badge = document.querySelector('.franchise-badge[data-card-filter-category="saga"]');
+    if (!badge) throw new Error('No franchise badge found');
+    badge.click();
+    return decodeURIComponent(badge.dataset.cardFilterValue);
+  });
+  await waitForExpression(page, `document.querySelector('#activeFilters').textContent.includes('Saga: ${saga}')`, 'saga filter active');
+
+  const snapshot = await evaluateFunction(page, (sagaName) => ({
+    filterCount: document.querySelector('#filterCount').textContent.trim(),
+    cards: document.querySelectorAll('.movie-card--media').length,
+    allSameSaga: [...document.querySelectorAll('.movie-card--media .franchise-badge')]
+      .every(b => b.textContent.startsWith(sagaName))
+  }), saga);
+  assert.equal(snapshot.filterCount, '1');
+  assert.ok(snapshot.cards > 0);
+  assert.equal(snapshot.allSameSaga, true);
+
+  // Removing the active-filter chip clears the saga filter.
+  await click(page, 'button[data-filter-category="saga"]');
+  await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 0`, 'saga filter removed');
+});
+
 test('sort selector changes the first rendered card consistently with app sorting logic', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
 

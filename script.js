@@ -61,7 +61,7 @@ const state = {
   sort: "position-desc",
   filterSearch: { actor: "", director: "" },
   matchMode: { ...DEFAULT_MATCH_MODE },
-  selected: { genre: new Set(), actor: new Set(), director: new Set() },
+  selected: { genre: new Set(), actor: new Set(), director: new Set(), saga: new Set() },
   selection: new Set(),
   selectionPanelOpen: false,
   selectionDetailId: "",
@@ -418,8 +418,9 @@ function decodeFilterValue(value) {
   }
 }
 function filterToggleLabel(category, value) {
+  const label = category === "saga" ? "saga" : categories[category].label.toLowerCase();
   const action = state.selected[category].has(value) ? "Retirer" : "Ajouter";
-  return `${action} le filtre ${categories[category].label.toLowerCase()} ${value}`;
+  return `${action} le filtre ${label} ${value}`;
 }
 
 function clearOptionCountsCache() {
@@ -546,8 +547,15 @@ function rowSearchText(row) {
   return row.__searchText;
 }
 function matchesSearch(row) { return !state.search || rowSearchText(row).includes(normalize(state.search)); }
+function matchesSaga(row) {
+  // Single-valued filter set by clicking a franchise badge; a movie matches when its saga is one of the selected ones.
+  const selected = state.selected.saga;
+  if (!selected || !selected.size) return true;
+  const name = sagaName(row);
+  return name ? selected.has(name) : false;
+}
 function matchesFilters(row, skipCategory = null) {
-  return matchesSearch(row) && categoryKeys.every(category => (
+  return matchesSearch(row) && matchesSaga(row) && categoryKeys.every(category => (
     category === skipCategory || matchesList(listFor(row, category), state.selected[category], state.matchMode[category])
   ));
 }
@@ -929,7 +937,10 @@ function renderFranchiseBadge(model) {
   const order = Number.isFinite(model.sagaOrder) ? model.sagaOrder : null;
   const total = model.sagaTotal > 0 ? model.sagaTotal : null;
   const suffix = order && total ? ` · ${order} / ${total}` : order ? ` · ${order}` : "";
-  return `<span class="franchise-badge">${escapeHtml(model.saga)}${escapeHtml(suffix)}</span>`;
+  const selected = (state.selected.saga || new Set()).has(model.saga);
+  const classes = ["franchise-badge", "card-filter-button", selected ? "franchise-badge--selected" : ""].filter(Boolean).join(" ");
+  // Clicking filters the library to this saga (toggled via the shared card-filter handler).
+  return `<button class="${classes}" type="button" data-card-filter-category="saga" data-card-filter-value="${encodeFilterValue(model.saga)}" aria-pressed="${selected}" aria-label="${escapeHtml(filterToggleLabel("saga", model.saga))}">${escapeHtml(model.saga)}${escapeHtml(suffix)}</button>`;
 }
 function renderImdbBadge(model) {
   if (!model.rating) return "";
@@ -1177,6 +1188,7 @@ function renderSelectionPanel() {
 function activeFilters() {
   return [
     ...(state.search ? [{ group: "Recherche", category: "search", value: state.search }] : []),
+    ...[...(state.selected.saga || [])].map(value => ({ group: "Saga", category: "saga", value })),
     ...categoryKeys.flatMap(category => [...state.selected[category]].map(value => ({ group: categories[category].label, category, value })))
   ];
 }
