@@ -125,6 +125,20 @@ h1 {
   background: var(--panel);
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand__logo {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  filter: drop-shadow(0 4px 10px rgba(212, 180, 131, 0.25));
+}
+
 .app-shell {
   width: 100%;
   max-width: 1180px;
