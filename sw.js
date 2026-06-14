@@ -2,7 +2,7 @@
    Bump VERSION and the cache-busting query strings together with
    index.html/style.css/script.js on every deploy, or clients can be served a
    stale shell from the cache. */
-const VERSION = "mlx-8.8.0";
+const VERSION = "mlx-8.8.1";
 const SHELL = VERSION + "-shell";
 const DATA = VERSION + "-data";
 
@@ -12,8 +12,8 @@ const SHELL_ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=8.8.0",
-  "./script.js?v=8.8.0",
+  "./style.css?v=8.8.1",
+  "./script.js?v=8.8.1",
   "./src/app.mjs",
   "./src/config.mjs",
   "./src/data.mjs",
@@ -29,11 +29,11 @@ const SHELL_ASSETS = [
   "./src/utils.mjs",
   "./favicon.svg",
   "./favicon-16.png",
-  "./favicon-32.png?v=8.8.0",
-  "./apple-touch-icon.png?v=8.8.0",
-  "./icon-192.png?v=8.8.0",
-  "./icon-512.png?v=8.8.0",
-  "./icon-maskable-512.png?v=8.8.0"
+  "./favicon-32.png?v=8.8.1",
+  "./apple-touch-icon.png?v=8.8.1",
+  "./icon-192.png?v=8.8.1",
+  "./icon-512.png?v=8.8.1",
+  "./icon-maskable-512.png?v=8.8.1"
 ];
 
 self.addEventListener("install", event => {
