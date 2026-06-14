@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 const assert = require('node:assert/strict');
+const { createTestRegistry } = require('./helpers/test-runner');
+const { runBrowserTests, runOneBrowserTest } = require('./helpers/browser-runner');
 const {
-  browserTestSkipReason,
-  flushPages,
-  startChromium,
   createPage,
   evaluate,
   evaluateFunction,
@@ -14,13 +13,13 @@ const {
   clickFilterOptionByLabel
 } = require('./browser-test-utils');
 
-const tests = [];
-function test(name, fn) { tests.push({ name, fn }); }
+const { tests, test } = createTestRegistry();
 
 test('loads the fixture and renders the library without browser errors', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   const snapshot = await evaluateFunction(page, () => ({
     cards: document.querySelectorAll('.movie-card').length,
+    totalRows: window.__MovieExplorerTestHooks.state.rows.length,
     statusHidden: document.querySelector('#status').hidden,
     summary: document.querySelector('#resultSummary').textContent.replace(/\s+/g, ' ').trim(),
     diagnosticsHidden: document.querySelector('#diagnostics').hidden,
@@ -30,17 +29,17 @@ test('loads the fixture and renders the library without browser errors', async (
     selectionButtonLabel: document.querySelector('.movie-card button[data-selection-id]')?.getAttribute('aria-label'),
     selectionButtonPosition: getComputedStyle(document.querySelector('.movie-card button[data-selection-id]')).position,
     cardPosition: getComputedStyle(document.querySelector('.movie-card')).position,
-    firstPosterSrc: document.querySelector('.movie-card .movie-poster img')?.getAttribute('src'),
-    posterCount: document.querySelectorAll('.movie-card .movie-poster img').length,
+    firstPosterSrc: document.querySelector('.movie-card .movie-poster')?.dataset.posterUrl || document.querySelector('.movie-card .movie-poster img')?.getAttribute('src'),
+    posterCount: document.querySelectorAll('.movie-card .movie-poster').length,
     gridMode: document.querySelector('#movieGrid').dataset.viewMode,
     hasMediaCard: Boolean(document.querySelector('.movie-card.movie-card--media')),
     hasCardWithPoster: Boolean(document.querySelector('.movie-card.movie-card--with-poster')),
     hasFranchiseBadge: document.querySelectorAll('.franchise-badge').length
   }));
 
-  assert.equal(snapshot.cards, 511);
+  assert.equal(snapshot.cards, snapshot.totalRows);
   assert.equal(snapshot.statusHidden, true);
-  assert.match(snapshot.summary, /511\s*\/\s*511 films affichés/);
+  assert.match(snapshot.summary, new RegExp(`${snapshot.totalRows}\\s*\\/\\s*${snapshot.totalRows} films affichés`));
   assert.equal(snapshot.statCards, 0);
   assert.equal(snapshot.diagnosticsHidden, true);
   assert.ok(snapshot.firstCardTitle);
@@ -59,19 +58,20 @@ test('loads the fixture and renders the library without browser errors', async (
 test('search reduces displayed results and clear filters restores them', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   await setInputValue(page, '#searchInput', 'matrix');
-  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < 511`, 'search results');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < window.__MovieExplorerTestHooks.state.rows.length`, 'search results');
 
   const searchSnapshot = await evaluateFunction(page, () => ({
     cards: document.querySelectorAll('.movie-card').length,
+    totalRows: window.__MovieExplorerTestHooks.state.rows.length,
     activeText: document.querySelector('#activeFilters').textContent,
     allContainQuery: [...document.querySelectorAll('.movie-card')].every(card => card.textContent.toLowerCase().includes('matrix'))
   }));
-  assert.ok(searchSnapshot.cards > 0 && searchSnapshot.cards < 511);
+  assert.ok(searchSnapshot.cards > 0 && searchSnapshot.cards < searchSnapshot.totalRows);
   assert.match(searchSnapshot.activeText, /Recherche:\s*matrix/);
   assert.equal(searchSnapshot.allContainQuery, true);
 
   await click(page, '#clearFilters');
-  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === 511`, 'full result set after clearing');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === window.__MovieExplorerTestHooks.state.rows.length`, 'full result set after clearing');
   assert.equal(await evaluate(page, `document.querySelector('#activeFilters').textContent.trim()`), '');
 });
 
@@ -82,12 +82,13 @@ test('genre checkbox selection updates cards, count badges and selected chips', 
 
   const snapshot = await evaluateFunction(page, () => ({
     cards: document.querySelectorAll('.movie-card').length,
+    totalRows: window.__MovieExplorerTestHooks.state.rows.length,
     filterCount: document.querySelector('#filterCount').textContent.trim(),
     genreSelectedCount: document.querySelector('#genreSelectedCount').textContent.trim(),
     hasSelectedChip: Boolean(document.querySelector('.genre-chip--selected')),
     allCardsHaveAction: [...document.querySelectorAll('.movie-card')].every(card => card.textContent.includes('Action'))
   }));
-  assert.ok(snapshot.cards > 0 && snapshot.cards < 511);
+  assert.ok(snapshot.cards > 0 && snapshot.cards < snapshot.totalRows);
   assert.equal(snapshot.filterCount, '1');
   assert.equal(snapshot.genreSelectedCount, '1');
   assert.equal(snapshot.hasSelectedChip, true);
@@ -113,6 +114,28 @@ test('the segmented match toggle switches between "all" and "any" matching', asy
   assert.equal(snapshot.anyActive, true);
   assert.equal(snapshot.allActive, false);
   assert.ok(snapshot.anyCount > allCount, '"any" should match at least as many films as "all"');
+});
+
+test('filter tab activation is scoped to navigation buttons only', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await clickFilterOptionByLabel(page, '#genreList', 'Action');
+  await waitForExpression(page, `document.querySelector('#activeFilters button[data-filter-category="genre"]')`, 'active genre chip remove button');
+
+  await click(page, '.filter-jump-nav__button[data-filter-category="actor"]');
+  const snapshot = await evaluateFunction(page, () => {
+    const remove = document.querySelector('#activeFilters button[data-filter-category="genre"]');
+    const actorTab = document.querySelector('.filter-jump-nav__button[data-filter-category="actor"]');
+    return {
+      removeHasActiveClass: remove.classList.contains('is-active'),
+      removeAriaPressed: remove.getAttribute('aria-pressed'),
+      actorTabActive: actorTab.classList.contains('is-active'),
+      actorPanelHidden: document.querySelector('#actorSection').hidden
+    };
+  });
+  assert.equal(snapshot.removeHasActiveClass, false);
+  assert.equal(snapshot.removeAriaPressed, null);
+  assert.equal(snapshot.actorTabActive, true);
+  assert.equal(snapshot.actorPanelHidden, false);
 });
 
 test('card filter buttons toggle a filter on and off', async ({ browserWsUrl }) => {
@@ -145,12 +168,16 @@ test('clicking a franchise badge filters the library to that saga', async ({ bro
   const snapshot = await evaluateFunction(page, (sagaName) => ({
     filterCount: document.querySelector('#filterCount').textContent.trim(),
     cards: document.querySelectorAll('.movie-card--media').length,
+    selectedBadges: document.querySelectorAll('.movie-card--media .franchise-badge[aria-pressed="true"]').length,
     allSameSaga: [...document.querySelectorAll('.movie-card--media .franchise-badge')]
-      .every(b => b.textContent.startsWith(sagaName))
+      .every(b => b.textContent.startsWith(sagaName)),
+    firstActorOption: document.querySelector('#actorList .filter-option')?.textContent.replace(/\s+/g, ' ').trim()
   }), saga);
   assert.equal(snapshot.filterCount, '1');
   assert.ok(snapshot.cards > 0);
+  assert.ok(snapshot.selectedBadges > 0, 'reused franchise badges should show selected state');
   assert.equal(snapshot.allSameSaga, true);
+  assert.match(snapshot.firstActorOption, /Pierre Fresnay|Raimu/);
 
   // Removing the active-filter chip clears the saga filter.
   await click(page, 'button[data-filter-category="saga"]');
@@ -206,7 +233,7 @@ test('desktop renders the editorial card grid automatically with no display-mode
     mediaRows: document.querySelectorAll('.movie-card--media').length,
     listRows: document.querySelectorAll('.movie-card--list').length,
     seamRows: document.querySelectorAll('.movie-card--media .card-banner + .card-seam + .movie-card__body').length,
-    thumbPosterRows: document.querySelectorAll('.movie-card--media .card-thumb img').length,
+    thumbPosterRows: document.querySelectorAll('.movie-card--media .card-thumb').length,
     selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
   assert.equal(cardSnapshot.mode, 'cards');
@@ -228,12 +255,13 @@ test('mobile renders card view automatically with no display-mode selector', asy
     gridMode: document.querySelector('#movieGrid').dataset.viewMode,
     listRows: document.querySelectorAll('.movie-card--list').length,
     cardRows: document.querySelectorAll('.movie-card').length,
+    totalRows: window.__MovieExplorerTestHooks.state.rows.length,
     selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
   assert.equal(snapshot.effectiveMode, 'cards');
   assert.equal(snapshot.gridMode, 'cards');
   assert.equal(snapshot.listRows, 0);
-  assert.equal(snapshot.cardRows, 511);
+  assert.equal(snapshot.cardRows, snapshot.totalRows);
   assert.equal(snapshot.selectorExists, false);
 });
 
@@ -244,7 +272,7 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   assert.equal(await evaluate(page, `document.querySelector('button[data-selection-id][aria-pressed="true"]')?.textContent.trim()`), '✓');
 
   await setInputValue(page, '#searchInput', 'matrix');
-  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < 511`, 'search after selecting');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length > 0 && document.querySelectorAll('.movie-card').length < window.__MovieExplorerTestHooks.state.rows.length`, 'search after selecting');
   assert.equal(await evaluate(page, `document.querySelector('#selectionCount').textContent.trim()`), '1');
 
   await click(page, '#toggleSelectionPanel');
@@ -262,7 +290,7 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   const detailSnapshot = await evaluateFunction(page, () => ({
     hasFullCard: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-card')),
     hasActors: document.querySelector('#selectionPanel .selection-detail .card-credits')?.textContent.length > 0,
-    hasPoster: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-poster img')),
+    hasPoster: Boolean(document.querySelector('#selectionPanel .selection-detail .movie-poster')),
     expanded: document.querySelector('button[data-selection-detail-id]')?.getAttribute('aria-expanded'),
     summaryFocused: document.activeElement === document.querySelector('button[data-selection-detail-id]')
   }));
@@ -368,41 +396,9 @@ test('mobile actor search result can be selected with the first touch after typi
   assert.equal(snapshot.selectedButtonPressed, true);
 });
 
-(async () => {
-  const skipReason = browserTestSkipReason();
-  if (skipReason) {
-    console.log(`⚠ Skipping browser E2E tests: ${skipReason}`);
-    return;
-  }
-
-  const chromium = startChromium();
-  let browserWsUrl;
-  try {
-    ({ wsUrl: browserWsUrl } = await chromium.ready);
-    let passed = 0;
-    for (const { name, fn } of tests) {
-      try {
-        await fn({ browserWsUrl });
-        // Drain and close every page the scenario opened, then fail it on any console error or uncaught exception.
-        for (const diagnostics of await flushPages()) {
-          assert.deepEqual(diagnostics.consoleErrors, [], `console errors during "${name}"`);
-          assert.deepEqual(diagnostics.exceptions, [], `uncaught exceptions during "${name}"`);
-        }
-        passed += 1;
-        console.log(`✓ ${name}`);
-      } catch (error) {
-        console.error(`✗ ${name}`);
-        console.error(error.stack || error.message);
-        process.exitCode = 1;
-        break;
-      }
-    }
-    if (process.exitCode !== 1) console.log(`\n${passed}/${tests.length} browser E2E scenarios passed.`);
-  } finally {
-    chromium.child.kill('SIGTERM');
-    try { fs.rmSync(chromium.profileDir, { recursive: true, force: true }); } catch {}
-  }
-})().catch(error => {
+const requestedIndex = process.env.MOVIE_EXPLORER_E2E_TEST_INDEX;
+const runner = requestedIndex === undefined ? runBrowserTests(tests) : runOneBrowserTest(tests[Number(requestedIndex)]);
+runner.catch(error => {
   console.error(error.stack || error.message);
   process.exitCode = 1;
 });

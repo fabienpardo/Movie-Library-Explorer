@@ -6,9 +6,36 @@ const { spawn } = require('node:child_process');
 
 const rootDir = path.resolve(__dirname, '..');
 const indexPath = path.join(rootDir, 'index.html');
-const scriptPath = path.join(rootDir, 'script.js');
 const stylePath = path.join(rootDir, 'style.css');
-const fixturePath = path.join(rootDir, 'tests', 'fixtures', 'apple-tv-movies-library-mdb.csv');
+const srcDir = path.join(rootDir, 'src');
+// Keep this in dependency (topological) order: each module's deps must appear before it.
+// The in-page loader rewrites import specifiers to blob URLs in this order, so a module can
+// only reference URLs already built. Adding a new src/*.mjs only requires adding it here.
+const modulePaths = {
+  config: path.join(srcDir, 'config.mjs'),
+  utils: path.join(srcDir, 'utils.mjs'),
+  dom: path.join(srcDir, 'dom.mjs'),
+  state: path.join(srcDir, 'state.mjs'),
+  data: path.join(srcDir, 'data.mjs'),
+  sorting: path.join(srcDir, 'sorting.mjs'),
+  matching: path.join(srcDir, 'matching.mjs'),
+  'filter-panel': path.join(srcDir, 'filter-panel.mjs'),
+  'render-cards': path.join(srcDir, 'render-cards.mjs'),
+  'render-filters': path.join(srcDir, 'render-filters.mjs'),
+  selection: path.join(srcDir, 'selection.mjs'),
+  app: path.join(srcDir, 'app.mjs'),
+  'test-hooks': path.join(srcDir, 'test-hooks.mjs')
+};
+const fixturePath = path.join(rootDir, 'tests', 'fixtures', 'e2e-movies-library-mdb.csv');
+const CDP_COMMAND_TIMEOUT_MS = 8000;
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 const CHROMIUM_CANDIDATES = [
   process.env.CHROMIUM_PATH,
   '/usr/bin/chromium',
@@ -62,7 +89,7 @@ function requestJson(url, options = {}) {
           return;
         }
         try { resolve(JSON.parse(body)); }
-        catch (error) { reject(new Error(`Invalid JSON from ${url}: ${body.slice(0, 200)}`)); }
+        catch { reject(new Error(`Invalid JSON from ${url}: ${body.slice(0, 200)}`)); }
       });
     });
     req.on('error', reject);
@@ -109,10 +136,24 @@ class CDPClient {
   }
 
   async send(method, params = {}) {
-    await this.opened;
+    await withTimeout(this.opened, CDP_COMMAND_TIMEOUT_MS, `CDP open ${method}`);
     const id = this.nextId++;
-    const promise = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
-    this.ws.send(JSON.stringify({ id, method, params }));
+    const promise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP command ${method} timed out after ${CDP_COMMAND_TIMEOUT_MS}ms`));
+      }, CDP_COMMAND_TIMEOUT_MS);
+      this.pending.set(id, {
+        resolve: value => { clearTimeout(timer); resolve(value); },
+        reject: error => { clearTimeout(timer); reject(error); }
+      });
+    });
+    try {
+      this.ws.send(JSON.stringify({ id, method, params }));
+    } catch (error) {
+      this.pending.delete(id);
+      throw error;
+    }
     return promise;
   }
 
@@ -131,11 +172,15 @@ function startChromium() {
     '--disable-gpu',
     '--disable-dev-shm-usage',
     '--disable-background-networking',
+    '--blink-settings=imagesEnabled=false',
     '--remote-debugging-port=0',
     `--user-data-dir=${profileDir}`,
     'about:blank'
   ];
-  const child = spawn(executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  const child = spawn(executable, args, {
+    stdio: ['ignore', 'ignore', 'pipe'],
+    detached: true
+  });
 
   const ready = new Promise((resolve, reject) => {
     let stderr = '';
@@ -178,6 +223,8 @@ async function createPage(browserWsUrl, options = {}) {
 
   await page.send('Page.enable');
   await page.send('Runtime.enable');
+  await page.send('Network.enable');
+  await page.send('Network.setBlockedURLs', { urls: ['http://*/*', 'https://*/*'] });
   if (options.mobile) {
     await page.send('Emulation.setDeviceMetricsOverride', {
       width: 390,
@@ -199,9 +246,11 @@ async function createPage(browserWsUrl, options = {}) {
 
   const html = sanitizedIndexHtml();
   const css = fs.readFileSync(stylePath, 'utf8');
-  const script = fs.readFileSync(scriptPath, 'utf8');
   const fixture = fs.readFileSync(fixturePath, 'utf8');
-  await evaluateFunction(page, (html, css, fixtureMode, fixtureCsv) => {
+  const moduleSources = Object.fromEntries(
+    Object.entries(modulePaths).map(([name, modulePath]) => [name, fs.readFileSync(modulePath, 'utf8')])
+  );
+  await evaluateFunction(page, (html, css, fixtureMode, fixtureCsv, moduleSources) => {
     document.open();
     document.write(html);
     document.close();
@@ -228,8 +277,24 @@ async function createPage(browserWsUrl, options = {}) {
       }
       return { ok: true, status: 200, text: async () => fixtureCsv };
     };
-  }, html, css, options.fixtureMode || '1', fixture);
-  await evaluate(page, `${script}\n//# sourceURL=movie-explorer-script.js`);
+
+    const makeModuleUrl = source => URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    // moduleSources is provided in dependency order. Rewrite each module's relative imports to the
+    // blob URLs of the modules already built, then publish its own blob URL for later dependents.
+    const moduleUrls = {};
+    for (const [name, source] of Object.entries(moduleSources)) {
+      let rewritten = source;
+      for (const [dep, url] of Object.entries(moduleUrls)) {
+        rewritten = rewritten.replaceAll(`./${dep}.mjs`, url);
+      }
+      moduleUrls[name] = makeModuleUrl(rewritten);
+    }
+    window.__movieExplorerModulePromise = import(moduleUrls['test-hooks']).then(({ initApp, installTestHooks }) => {
+      installTestHooks(window);
+      initApp();
+    });
+  }, html, css, options.fixtureMode || '1', fixture, moduleSources);
+  await evaluate(page, 'window.__movieExplorerModulePromise');
   await waitForApp(page);
   return { page, diagnostics };
 }
@@ -339,5 +404,6 @@ module.exports = {
   setInputValue,
   setSelectValue,
   click,
-  clickFilterOptionByLabel
+  clickFilterOptionByLabel,
+  withTimeout
 };
