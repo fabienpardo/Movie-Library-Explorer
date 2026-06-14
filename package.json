@@ -1,10 +1,13 @@
 {
   "scripts": {
-    "test": "npm run test:unit && npm run test:assets && npm run test:e2e",
+    "test": "npm run test:runner && npm run test:graph && npm run test:unit && npm run test:assets && npm run test:e2e",
+    "test:runner": "node tests/test-runner.test.js",
+    "test:graph": "node tests/module-graph.test.js",
     "test:unit": "node tests/regression.test.js",
     "test:assets": "node tests/static-assets.test.js",
     "test:e2e": "node tests/e2e.browser.test.js",
-    "test:coverage": "npx --yes c8 --include=script.js --reporter=text --reporter=html node tests/regression.test.js"
+    "test:coverage": "npx --yes c8 --include=src/*.mjs --include=script.js --reporter=text --reporter=html node tests/regression.test.js",
+    "lint": "npx --yes eslint src tests script.js"
   },
   "engines": {
     "node": ">=20"
