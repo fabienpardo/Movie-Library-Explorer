@@ -2,9 +2,10 @@
 
 This folder contains test-only assets and scenarios. It is not used by the deployed app unless a test flag is explicitly passed.
 
-## Fixture
+## Fixtures
 
-- `fixtures/apple-tv-movies-library-mdb.csv`: local CSV copy of the Apple TV movie library, used only by tests.
+- `fixtures/apple-tv-movies-library-mdb.csv`: full local CSV copy of the movie library, used by unit/regression tests.
+- `fixtures/e2e-movies-library-mdb.csv`: smaller browser fixture used by the E2E layer to reduce Chromium runtime and avoid resource-pressure flakes.
 
 ## Run
 
@@ -22,34 +23,36 @@ npm run test:assets
 npm run test:e2e
 ```
 
-Coverage (unit layer, via on-demand `c8` — no committed dependency):
+Coverage is optional and uses on-demand `c8`:
 
 ```bash
-npm run test:coverage   # prints a summary and writes coverage/index.html
-```
-
-Direct commands:
-
-```bash
-node tests/regression.test.js
-node tests/static-assets.test.js
-node tests/e2e.browser.test.js
+npm run test:coverage
 ```
 
 ## Requirements
 
-- Node.js. The unit and asset layers run on any maintained version.
-- The browser E2E layer additionally needs a global `WebSocket` (Node 22+, or `node --experimental-websocket`) and a Chromium/Chrome binary. When either is missing, `test:e2e` prints a skip notice and exits 0 so `npm test` stays green.
+- Node.js.
+- The browser E2E layer additionally needs a global `WebSocket` and a Chromium/Chrome binary.
 
-The browser runner is dependency-free and uses the Chrome DevTools Protocol directly. If Chromium is not installed in a standard path, run with:
+When Chromium is not installed in a standard path, run with:
 
 ```bash
 CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 ```
 
+If the browser layer cannot run in the current environment, it prints a skip notice and exits 0 so `npm test` remains usable.
+
+## Browser runner notes
+
+The browser runner is dependency-free and uses the Chrome DevTools Protocol directly. It loads the app module graph from `src/*.mjs` as Blob-backed ES modules inside the test page, then imports `src/app.mjs` and calls `initApp()`.
+
+External HTTP(S) requests are blocked during E2E runs. `window.fetch` is replaced with a fixture-backed response, and poster images are not fetched from the network. This keeps the test suite deterministic while leaving production behavior unchanged.
+
 ## Covered scenarios
 
 ### Unit / data regression
+
+Shared fixture setup and runner logic lives in `tests/helpers/app-hooks.js` and `tests/helpers/test-runner.js`; the regression file keeps the scenario assertions only.
 
 1. The fixture CSV can be parsed.
 2. The app detects the expected movie-library columns.
@@ -66,33 +69,43 @@ CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 13. Legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format.
 14. Selection detail DOM IDs are sanitized by a dedicated helper.
 15. Search matches real cell values only and ignores the synthetic movie ID.
-16. `escapeHtml` neutralizes HTML metacharacters and stays wired into rendered card markup (XSS guard).
+16. `escapeHtml` neutralizes HTML metacharacters for the remaining non-DOM string contexts.
 17. `parseCsv` handles quoted delimiters, escaped quotes, embedded newlines, CRLF and blank lines.
 18. `parseRuntime` and `parseDateValue` cover every supported input shape.
 19. `baseOptionCounts` memoizes per input state and recomputes when filters change.
+20. Saga filter state is included in the option-count cache key.
+21. Option-count cache size remains bounded.
 
 ### Static asset checks
+
+Static tests use grouped pattern assertions so removed-code and safety guards can be extended without duplicating boilerplate.
 
 1. `index.html` references only existing local assets.
 2. The manifest references existing icons.
 3. Cache-busting versions stay aligned with the package version.
-4. Removed UI features and fragile selector patterns stay absent.
-5. Mobile card-only mode does not keep mobile list-view CSS overrides.
-6. Roadmap CSS hooks exist for sticky summary and list view.
-7. Robustness cleanup helpers remain present.
-8. The CSV fixture stays isolated under `tests/fixtures` and the production data source remains the default.
+4. Removed UI features and fragile selector patterns stay absent across `script.js` and `src/*.mjs`.
+5. Card-only mode does not keep list-view code paths.
+6. Stylesheet sections stay in the documented order.
+7. Sticky summary and selection-detail hooks remain present.
+8. Robustness helpers remain present after modularization.
+9. Runtime source stays free of live `innerHTML`/`insertAdjacentHTML`/`outerHTML` injection.
+10. Test fixtures remain isolated from the default production data source.
 
-### Browser E2E checks
+### Browser E2E
 
-1. The app renders the fixture library without browser errors.
-2. Search reduces results and `Tout effacer` restores the full set.
-3. Genre checkbox selection updates cards, badges and selected chips.
-4. Card filter buttons toggle filters on and off.
-5. Sort options update the first rendered card consistently with app sorting logic.
-6. The sticky result summary tracks filters, sort and selection count.
-7. Display settings switch between cards/list without losing filters on desktop, including compact list posters.
-8. Mobile keeps card view and hides the display-mode selector.
-9. Temporary selection can add, review, remove and clear movies.
-10. Failed reload clears stale cards, active filters and filter lists.
-11. Mobile filter panel opens as a dialog and closes on Escape.
-12. Mobile actor search result can be selected with the first touch after typing.
+Browser lifecycle, timeout, page flushing, and diagnostics assertions live in `tests/helpers/browser-runner.js`; `e2e.browser.test.js` keeps scenario-level interactions.
+
+1. The fixture renders without browser errors.
+2. Search and clear filters work.
+3. Genre selection updates cards, counts, and selected chips.
+4. Match mode toggles between `Tous` and `Au moins un`.
+5. Filter tab activation is scoped to navigation buttons.
+6. Card filter buttons toggle filters on and off.
+7. Saga badges filter the library.
+8. Sorting changes the first rendered card consistently.
+9. Sticky summary reflects filters, sort, and selection count.
+10. Desktop and mobile both use card mode only.
+11. Temporary selection can add, review, remove, and clear movies.
+12. Failed reload clears stale state.
+13. Mobile filter panel opens/closes as a dialog.
+14. Mobile actor search results can be selected with the first touch after typing.
