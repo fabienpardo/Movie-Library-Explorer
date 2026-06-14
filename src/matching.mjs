@@ -35,11 +35,26 @@ function matchesSaga(row) {
   return name ? selected.has(name) : false;
 }
 export function matchesFilters(row, skipCategory = null) {
-  return matchesSearch(row) && matchesSaga(row) && categoryKeys.every(category => (
-    category === skipCategory || matchesList(listFor(row, category), state.selected[category], state.matchMode[category])
-  ));
+  return matchesSearch(row)
+    && (skipCategory === "saga" || matchesSaga(row))
+    && categoryKeys.every(category => (
+      category === skipCategory || matchesList(listFor(row, category), state.selected[category], state.matchMode[category])
+    ));
 }
 export function filteredRows() { return state.rows.filter(row => matchesFilters(row)); }
+
+// Saga is single-valued and multi-select OR, so its option counts always skip the
+// saga selection itself (like "any" mode for the list categories) to avoid dead-ends.
+export function sagaOptionCounts() {
+  if (!state.columns.saga) return [];
+  const counts = new Map();
+  for (const row of state.rows.filter(item => matchesFilters(item, "saga"))) {
+    const name = sagaName(row);
+    if (name) counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  for (const value of state.selected.saga || []) if (!counts.has(value)) counts.set(value, 0);
+  return [...counts.entries()].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
+}
 
 function optionCountsCacheKey(category) {
   return JSON.stringify({

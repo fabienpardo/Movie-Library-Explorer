@@ -54,7 +54,8 @@ function cacheEls() {
     "status", "diagnostics", "resultSummary", "movieGrid", "activeFilters", "selectionPanel", "filterPanel", "filterBackdrop",
     "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
     "searchInput", "sortSelect", "toggleSelectionPanel", "selectionCount",
-    "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode"
+    "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode",
+    "sagaList", "sagaSelectedCount"
   ].forEach(id => { els[id] = byId(id); });
 
   for (const cfg of Object.values(categories)) {
@@ -251,6 +252,12 @@ function bindEvents() {
       const option = event.target.closest(".filter-option");
       if (option) immediateFilterTap(category, option, event);
     }, { passive: false });
+  });
+
+  // Saga is single-valued (OR-only) and has no match toggle, so it is bound on its
+  // own rather than via the categoryKeys loop above.
+  els.sagaList.addEventListener("change", event => {
+    if (event.target.matches("input[type='checkbox']")) setFilterSelection("saga", event.target.value, event.target.checked);
   });
 
   els.movieGrid.addEventListener("error", handlePosterError, true);

@@ -74,6 +74,9 @@
           <button class="filter-jump-nav__button" type="button" data-filter-category="director" aria-pressed="false">
             <span>Réalisateurs</span><span id="directorSelectedCount" class="filter-jump-nav__count" hidden>0</span>
           </button>
+          <button class="filter-jump-nav__button" type="button" data-filter-category="saga" aria-pressed="false">
+            <span>Sagas</span><span id="sagaSelectedCount" class="filter-jump-nav__count" hidden>0</span>
+          </button>
         </nav>
 
         <p class="filter-hint">Les catégories se cumulent. Dans chacune, exigez <strong>au moins une</strong> valeur ou <strong>toutes</strong>.</p>
@@ -110,6 +113,11 @@
             <input id="directorFilterSearch" type="search" placeholder="Rechercher un réalisateur…" autocomplete="off" />
           </div>
           <div id="directorList" class="filter-list filter-list--searchable">Chargement…</div>
+        </section>
+
+        <section id="sagaSection" class="filter-section filter-category-panel" data-filter-panel="saga" hidden aria-label="Filtre par saga">
+          <p class="filter-hint">Une saga par film : ajoutez-en plusieurs pour les cumuler (au moins une).</p>
+          <div id="sagaList" class="filter-list">Chargement…</div>
         </section>
 
         <div class="filter-panel__actions">
