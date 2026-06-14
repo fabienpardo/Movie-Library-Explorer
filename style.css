@@ -1244,7 +1244,12 @@ h1 {
   flex: none;
 }
 
-.selection-close-button {
+/* The drawer is shown on every breakpoint, so keep its close button visible past the
+   desktop rule that hides .icon-button (used for the filter panel's sidebar close). */
+.selection-panel .selection-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   font-size: 24px;
 }

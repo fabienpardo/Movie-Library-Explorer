@@ -70,10 +70,10 @@ export function openSelectionPanel() {
   document.body.classList.add("selection-open");
   syncSelectionA11y();
   syncSelectionCount();
-  requestAnimationFrame(() => {
-    const closeButton = els.selectionPanel.querySelector("[data-selection-action='close']");
-    (closeButton || els.selectionPanel).focus();
-  });
+  // Focus synchronously (the drawer is already in layout): a deferred focus could
+  // otherwise land after a quick follow-up interaction and steal focus from it.
+  const closeButton = els.selectionPanel.querySelector("[data-selection-action='close']");
+  (closeButton || els.selectionPanel).focus();
 }
 export function closeSelectionPanel() {
   state.selectionPanelOpen = false;
