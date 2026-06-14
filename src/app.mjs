@@ -36,6 +36,7 @@ import {
 } from "./filter-panel.mjs";
 import {
   clearSelection,
+  closeSelectionPanel,
   renderSelectionPanel,
   syncSelectionCount,
   toggleMovieSelectionById,
@@ -55,7 +56,7 @@ function cacheEls() {
     "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
     "searchInput", "sortSelect", "toggleSelectionPanel", "selectionCount",
     "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode",
-    "sagaList", "sagaSelectedCount"
+    "sagaList", "sagaSelectedCount", "selectionBackdrop"
   ].forEach(id => { els[id] = byId(id); });
 
   for (const cfg of Object.values(categories)) {
@@ -288,6 +289,7 @@ function bindEvents() {
   els.closeFilters.addEventListener("click", closeFilters);
   els.applyFilters.addEventListener("click", closeFilters);
   els.filterBackdrop.addEventListener("click", closeFilters);
+  els.selectionBackdrop.addEventListener("click", closeSelectionPanel);
   els.backToTop.addEventListener("click", scrollToTop);
   window.addEventListener("scroll", syncBackToTop, { passive: true });
   window.addEventListener("resize", syncHeaderHeight, { passive: true });
@@ -322,11 +324,13 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.closest("button[data-selection-action='close']")) { closeSelectionPanel(); return; }
     if (event.target.closest("button[data-selection-action='clear']")) clearSelection();
   });
   document.querySelectorAll(".filter-jump-nav__button[data-filter-category]").forEach(button => button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory)));
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && state.filtersOpen) closeFilters();
+    if (event.key === "Escape" && state.selectionPanelOpen) closeSelectionPanel();
     trapFilterFocus(event);
   });
 

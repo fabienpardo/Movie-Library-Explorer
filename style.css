@@ -51,7 +51,7 @@ body {
   background-attachment: fixed;
 }
 
-body.filters-open { overflow: hidden; }
+body.filters-open, body.selection-open { overflow: hidden; }
 
 button, input, select { font: inherit; }
 
@@ -1185,7 +1185,7 @@ h1 {
    07 selection panel
    ============================================================ */
 
-.status-message, .result-summary, .selection-panel {
+.status-message, .result-summary {
   border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 16px 36px rgba(0,0,0,0.3);
@@ -1199,18 +1199,54 @@ h1 {
   min-height: var(--tap);
 }
 
-.selection-panel {
-  margin: 0 0 12px;
-  padding: 13px;
-  background: var(--panel);
+/* Selection is a right-side slide-over drawer (with scrim) on every breakpoint. */
+.selection-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.5);
 }
+
+.selection-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(420px, 92vw);
+  height: 100%;
+  margin: 0;
+  padding: calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));
+  border-left: 1px solid var(--line-strong);
+  background: var(--panel);
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.6);
+  overflow: auto;
+  transform: translateX(102%);
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.selection-panel.is-open { transform: translateX(0); }
 
 .selection-panel__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
+}
+
+.selection-panel__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.selection-close-button {
+  flex: none;
+  font-size: 24px;
 }
 
 .selection-panel__header h2 {
@@ -1521,7 +1557,7 @@ h1 {
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .result-summary, .status-message, .selection-panel { background: rgba(25, 34, 55, 0.94); }
+  .result-summary, .status-message { background: rgba(25, 34, 55, 0.94); }
 }
 
 @media (min-width: 560px) {
@@ -1565,6 +1601,7 @@ h1 {
   .movie-card:hover { transform: none; }
   .selection-toggle { transition: none; }
   .selection-toggle:active { transform: none; }
+  .selection-panel { transition: none; }
 }
 
 @media (max-width: 759px) {
