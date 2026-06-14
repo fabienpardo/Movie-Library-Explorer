@@ -63,6 +63,19 @@ test('manifest references existing icons', () => {
     assert.ok(icon.src, 'manifest icon should define src');
     assertFileExists(stripQuery(icon.src).replace(/^\.\//, ''));
   }
+  assert.ok(manifestJson.icons.some(icon => icon.purpose && icon.purpose.split(/\s+/).includes('maskable')), 'manifest should declare a maskable icon');
+});
+
+test('service worker precaches only existing assets at the aligned version', () => {
+  const sw = readRootFile('sw.js');
+  const versions = [...sw.matchAll(/\?v=([^"']+)/g)].map(match => match[1]);
+  assert.ok(versions.length >= 6, 'service worker should cache-bust shell assets');
+  assert.deepEqual([...new Set(versions)], ['8.8.0'], 'service worker asset versions must match the app version');
+
+  const shell = sw.match(/const SHELL_ASSETS\s*=\s*\[([\s\S]*?)\]/);
+  assert.ok(shell, 'SHELL_ASSETS array should be present');
+  const assets = [...shell[1].matchAll(/"([^"]+)"/g)].map(match => stripQuery(match[1]).replace(/^\.\//, ''));
+  for (const asset of assets) assertFileExists(asset === '' ? 'index.html' : asset);
 });
 
 test('cache-busting versions are aligned with the current package version', () => {
