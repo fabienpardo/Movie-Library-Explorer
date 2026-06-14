@@ -211,6 +211,14 @@ function handleFilterViewportChange() {
   else syncBackToTop();
 }
 
+// The header is sticky; publish its height so sticky elements below it (the
+// result summary) can pin just underneath instead of being hidden behind it.
+function syncHeaderHeight() {
+  const header = document.querySelector(".app-header");
+  if (!header) return;
+  document.documentElement.style.setProperty("--app-header-h", `${Math.round(header.getBoundingClientRect().height)}px`);
+}
+
 function bindEvents() {
   els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
   els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
@@ -275,6 +283,7 @@ function bindEvents() {
   els.filterBackdrop.addEventListener("click", closeFilters);
   els.backToTop.addEventListener("click", scrollToTop);
   window.addEventListener("scroll", syncBackToTop, { passive: true });
+  window.addEventListener("resize", syncHeaderHeight, { passive: true });
 
   els.activeFilters.addEventListener("click", event => {
     const button = event.target.closest("button[data-filter-category]");
@@ -328,5 +337,6 @@ export function initApp() {
   syncDisplaySettings();
   syncSelectionCount();
   syncBackToTop();
+  syncHeaderHeight();
   loadSheet();
 }

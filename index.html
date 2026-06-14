@@ -34,7 +34,18 @@
           <circle cx="24" cy="24" r="18" fill="none" stroke="var(--accent)" stroke-width="2" />
           <circle cx="24" cy="24" r="5.2" fill="var(--bg)" />
         </svg>
-        <h1>Explorateur de films</h1>
+        <div class="brand__text">
+          <h1>Explorateur de films</h1>
+          <p class="brand__subtitle">Ma bibliothèque</p>
+        </div>
+      </div>
+      <div class="app-search">
+        <svg class="app-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.3-4.3" />
+        </svg>
+        <label class="visually-hidden" for="searchInput">Rechercher des films</label>
+        <input id="searchInput" type="search" placeholder="Rechercher un titre, acteur, réalisateur, pays…" autocomplete="off" />
       </div>
     </div>
   </header>
@@ -116,9 +127,6 @@
 
     <section class="content-panel" aria-live="polite">
       <div class="mobile-toolbar">
-        <label class="visually-hidden" for="searchInput">Rechercher des films</label>
-        <input id="searchInput" type="search" placeholder="Rechercher des films…" autocomplete="off" />
-
         <label class="visually-hidden" for="sortSelect">Trier les films</label>
         <select id="sortSelect">
           <option value="position-desc" selected>Ajout récent</option>
