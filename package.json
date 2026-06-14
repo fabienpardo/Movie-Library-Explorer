@@ -1,4 +1,6 @@
 {
+  "name": "movie-library-explorer",
+  "version": "8.8.3",
   "scripts": {
     "test": "npm run test:runner && npm run test:graph && npm run test:unit && npm run test:assets && npm run test:e2e",
     "test:runner": "node tests/test-runner.test.js",
@@ -7,7 +9,8 @@
     "test:assets": "node tests/static-assets.test.js",
     "test:e2e": "node tests/e2e.browser.test.js",
     "test:coverage": "npx --yes c8 --include=src/*.mjs --include=script.js --reporter=text --reporter=html node tests/regression.test.js",
-    "lint": "npx --yes eslint src tests script.js"
+    "lint": "npx --yes eslint src tests script.js",
+    "bump": "node scripts/bump-version.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -3,7 +3,7 @@ import { els, state } from "./state.mjs";
 import { encodeFilterValue, pluralize } from "./utils.mjs";
 import { byId, createElement, replaceChildren, textNode } from "./dom.mjs";
 import { sortLabel } from "./sorting.mjs";
-import { activeCount, activeFilters, optionCounts } from "./matching.mjs";
+import { activeCount, activeFilters, optionCounts, sagaOptionCounts } from "./matching.mjs";
 import { syncDynamicFocusableFallback } from "./filter-panel.mjs";
 
 export function syncMatchMode(category) {
@@ -45,8 +45,34 @@ export function renderDiagnostics() {
 
 export function renderFilterLists() {
   categoryKeys.forEach(renderFilterList);
+  renderSagaList();
   updateCounts();
   syncDynamicFocusableFallback();
+}
+function renderSagaList() {
+  const container = els.sagaList;
+  if (!container) return;
+  if (!state.columns.saga) {
+    container.textContent = "Colonne saga non détectée";
+    return;
+  }
+  const counts = sagaOptionCounts();
+  if (!counts.length) {
+    container.textContent = "Aucune saga disponible pour les filtres actuels";
+    return;
+  }
+  const nodes = counts.map(([value, count]) => {
+    const input = createElement("input", { attrs: { type: "checkbox", value } });
+    input.checked = state.selected.saga.has(value);
+    return createElement("label", { className: "filter-option" }, [
+      input,
+      createElement("span", { className: "filter-option__content" }, [
+        createElement("span", { className: "filter-option__label", text: value }),
+        createElement("span", { className: "filter-option__count", text: count })
+      ])
+    ]);
+  });
+  replaceChildren(container, nodes);
 }
 function renderFilterList(category) {
   const cfg = categories[category];
@@ -117,4 +143,9 @@ export function updateCounts() {
     badge.textContent = String(count);
     badge.hidden = count === 0;
   });
+  if (els.sagaSelectedCount) {
+    const sagaCount = state.selected.saga.size;
+    els.sagaSelectedCount.textContent = String(sagaCount);
+    els.sagaSelectedCount.hidden = sagaCount === 0;
+  }
 }

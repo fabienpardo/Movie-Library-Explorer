@@ -9,18 +9,44 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Films" />
   <title>Explorateur de films</title>
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=8.8.0" />
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png?v=8.8.0" />
-  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=8.8.0" />
-  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=8.8.0" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=8.8.3" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png?v=8.8.3" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=8.8.3" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=8.8.3" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <!-- Bump CSS/JS query strings together when deploying. -->
-  <link rel="stylesheet" href="style.css?v=8.8.0" />
+  <link rel="stylesheet" href="style.css?v=8.8.3" />
 </head>
 <body>
   <header class="app-header">
     <div class="app-header__inner">
-      <h1>Explorateur de films</h1>
+      <div class="brand">
+        <svg class="brand__logo" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+          <circle cx="24" cy="24" r="20" fill="var(--panel)" />
+          <g>
+            <path d="M24.00 6.00L24.00 15.70L31.19 19.85Z" fill="var(--accent)" fill-opacity="0.9" />
+            <path d="M39.59 15.00L31.19 19.85L31.19 28.15Z" fill="var(--accent)" fill-opacity="0.55" />
+            <path d="M39.59 33.00L31.19 28.15L24.00 32.30Z" fill="var(--accent)" fill-opacity="0.9" />
+            <path d="M24.00 42.00L24.00 32.30L16.81 28.15Z" fill="var(--accent)" fill-opacity="0.55" />
+            <path d="M8.41 33.00L16.81 28.15L16.81 19.85Z" fill="var(--accent)" fill-opacity="0.9" />
+            <path d="M8.41 15.00L16.81 19.85L24.00 15.70Z" fill="var(--accent)" fill-opacity="0.55" />
+          </g>
+          <circle cx="24" cy="24" r="18" fill="none" stroke="var(--accent)" stroke-width="2" />
+          <circle cx="24" cy="24" r="5.2" fill="var(--bg)" />
+        </svg>
+        <div class="brand__text">
+          <h1>Explorateur de films</h1>
+          <p class="brand__subtitle">Ma bibliothèque</p>
+        </div>
+      </div>
+      <div class="app-search">
+        <svg class="app-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.3-4.3" />
+        </svg>
+        <label class="visually-hidden" for="searchInput">Rechercher des films</label>
+        <input id="searchInput" type="search" placeholder="Rechercher un titre, acteur, réalisateur, pays…" autocomplete="off" />
+      </div>
     </div>
   </header>
 
@@ -47,6 +73,9 @@
           </button>
           <button class="filter-jump-nav__button" type="button" data-filter-category="director" aria-pressed="false">
             <span>Réalisateurs</span><span id="directorSelectedCount" class="filter-jump-nav__count" hidden>0</span>
+          </button>
+          <button class="filter-jump-nav__button" type="button" data-filter-category="saga" aria-pressed="false">
+            <span>Sagas</span><span id="sagaSelectedCount" class="filter-jump-nav__count" hidden>0</span>
           </button>
         </nav>
 
@@ -86,6 +115,11 @@
           <div id="directorList" class="filter-list filter-list--searchable">Chargement…</div>
         </section>
 
+        <section id="sagaSection" class="filter-section filter-category-panel" data-filter-panel="saga" hidden aria-label="Filtre par saga">
+          <p class="filter-hint">Une saga par film : ajoutez-en plusieurs pour les cumuler (au moins une).</p>
+          <div id="sagaList" class="filter-list">Chargement…</div>
+        </section>
+
         <div class="filter-panel__actions">
           <button id="clearFilters" class="secondary-button" type="button">Tout effacer</button>
           <button id="reloadData" class="secondary-button" type="button">Recharger les données</button>
@@ -101,9 +135,6 @@
 
     <section class="content-panel" aria-live="polite">
       <div class="mobile-toolbar">
-        <label class="visually-hidden" for="searchInput">Rechercher des films</label>
-        <input id="searchInput" type="search" placeholder="Rechercher des films…" autocomplete="off" />
-
         <label class="visually-hidden" for="sortSelect">Trier les films</label>
         <select id="sortSelect">
           <option value="position-desc" selected>Ajout récent</option>
@@ -131,13 +162,15 @@
       <div id="diagnostics" class="diagnostics" hidden></div>
       <div id="resultSummary" class="result-summary" hidden></div>
       <div id="activeFilters" class="active-filters"></div>
-      <section id="selectionPanel" class="selection-panel" aria-labelledby="selectionPanelHeading" hidden></section>
       <div id="movieGrid" class="movie-grid" data-view-mode="cards"></div>
     </section>
   </main>
 
+  <section id="selectionPanel" class="selection-panel" aria-labelledby="selectionPanelHeading" aria-hidden="true" tabindex="-1" inert></section>
+  <div id="selectionBackdrop" class="selection-backdrop" hidden></div>
+
   <button id="backToTop" class="back-to-top" type="button" aria-label="Revenir en haut de la page" hidden>↑</button>
 
-  <script src="script.js?v=8.8.0"></script>
+  <script src="script.js?v=8.8.3"></script>
 </body>
 </html>

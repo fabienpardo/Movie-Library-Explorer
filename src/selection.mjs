@@ -57,10 +57,37 @@ export function toggleSelectionDetail(id) {
   const selector = typeof CSS !== "undefined" && CSS.escape ? `button[data-selection-detail-id="${CSS.escape(id)}"]` : null;
   if (selector) els.selectionPanel?.querySelector(selector)?.focus();
 }
-export function toggleSelectionPanel() {
-  state.selectionPanelOpen = !state.selectionPanelOpen;
+function syncSelectionA11y() {
+  els.selectionPanel.setAttribute("aria-hidden", String(!state.selectionPanelOpen));
+  els.selectionPanel.toggleAttribute("inert", !state.selectionPanelOpen);
+}
+export function openSelectionPanel() {
+  state.selectionPanelOpen = true;
+  state.lastSelectionFocus = document.activeElement;
   renderSelectionPanel();
+  els.selectionPanel.classList.add("is-open");
+  els.selectionBackdrop.hidden = false;
+  document.body.classList.add("selection-open");
+  syncSelectionA11y();
   syncSelectionCount();
+  // Focus synchronously (the drawer is already in layout): a deferred focus could
+  // otherwise land after a quick follow-up interaction and steal focus from it.
+  const closeButton = els.selectionPanel.querySelector("[data-selection-action='close']");
+  (closeButton || els.selectionPanel).focus();
+}
+export function closeSelectionPanel() {
+  state.selectionPanelOpen = false;
+  els.selectionPanel.classList.remove("is-open");
+  els.selectionBackdrop.hidden = true;
+  document.body.classList.remove("selection-open");
+  syncSelectionA11y();
+  syncSelectionCount();
+  if (state.lastSelectionFocus?.focus) state.lastSelectionFocus.focus();
+  state.lastSelectionFocus = null;
+}
+export function toggleSelectionPanel() {
+  if (state.selectionPanelOpen) closeSelectionPanel();
+  else openSelectionPanel();
 }
 function createSelectionItemNodes(row) {
   const id = movieId(row);
@@ -92,8 +119,6 @@ function createSelectionItemNodes(row) {
 }
 export function renderSelectionPanel() {
   if (!els.selectionPanel) return;
-  els.selectionPanel.hidden = !state.selectionPanelOpen;
-  if (!state.selectionPanelOpen) return;
 
   const rows = selectedRows();
   // Detail expansion is tied to selected rows, not the filtered result grid, so users can keep reviewing a shortlist while exploring other filters.
@@ -106,6 +131,11 @@ export function renderSelectionPanel() {
     attrs: { type: "button", "data-selection-action": "clear" },
     disabled: !state.selection.size
   });
+  const closeButton = createElement("button", {
+    className: "icon-button selection-close-button",
+    text: "×",
+    attrs: { type: "button", "aria-label": "Fermer la sélection", "data-selection-action": "close" }
+  });
   const children = [
     createElement("div", { className: "selection-panel__header" }, [
       createElement("div", {}, [
@@ -113,7 +143,7 @@ export function renderSelectionPanel() {
         createElement("h2", { text: "Sélection temporaire", attrs: { id: "selectionPanelHeading" } }),
         createElement("p", { text: pluralize(state.selection.size, "film sélectionné", "films sélectionnés") })
       ]),
-      clearButton
+      createElement("div", { className: "selection-panel__header-actions" }, [clearButton, closeButton])
     ])
   ];
   if (rows.length) {

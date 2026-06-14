@@ -179,9 +179,36 @@ test('clicking a franchise badge filters the library to that saga', async ({ bro
   assert.equal(snapshot.allSameSaga, true);
   assert.match(snapshot.firstActorOption, /Pierre Fresnay|Raimu/);
 
-  // Removing the active-filter chip clears the saga filter.
-  await click(page, 'button[data-filter-category="saga"]');
+  // Removing the active-filter chip clears the saga filter. Scope to #activeFilters
+  // because the saga filter tab now also carries data-filter-category="saga".
+  await click(page, '#activeFilters button[data-filter-category="saga"]');
   await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 0`, 'saga filter removed');
+});
+
+test('saga filter tab lists sagas and selecting one narrows the library', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await click(page, '.filter-jump-nav__button[data-filter-category="saga"]');
+  const saga = await evaluateFunction(page, () => {
+    const panelVisible = !document.querySelector('[data-filter-panel="saga"]').hidden;
+    if (!panelVisible) throw new Error('Saga panel did not activate');
+    const option = document.querySelector('#sagaList .filter-option .filter-option__label');
+    if (!option) throw new Error('No saga option rendered');
+    return option.textContent.trim();
+  });
+  await clickFilterOptionByLabel(page, '#sagaList', saga);
+  await waitForExpression(page, `document.querySelector('#activeFilters').textContent.includes('Saga: ${saga}')`, 'saga filter active from list');
+
+  const snapshot = await evaluateFunction(page, (sagaName) => ({
+    filterCount: document.querySelector('#filterCount').textContent.trim(),
+    sagaSelectedCount: document.querySelector('#sagaSelectedCount').textContent.trim(),
+    cards: document.querySelectorAll('.movie-card--media').length,
+    totalRows: window.__MovieExplorerTestHooks.state.rows.length,
+    allSameSaga: [...document.querySelectorAll('.movie-card--media .franchise-badge')].every(b => b.textContent.startsWith(sagaName))
+  }), saga);
+  assert.equal(snapshot.filterCount, '1');
+  assert.equal(snapshot.sagaSelectedCount, '1');
+  assert.ok(snapshot.cards > 0 && snapshot.cards < snapshot.totalRows);
+  assert.equal(snapshot.allSameSaga, true);
 });
 
 test('sort selector changes the first rendered card consistently with app sorting logic', async ({ browserWsUrl }) => {

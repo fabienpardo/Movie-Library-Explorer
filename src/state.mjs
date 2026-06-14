@@ -29,6 +29,7 @@ export const state = {
   activePanel: "genre",
   filtersOpen: false,
   lastFocus: null,
+  lastSelectionFocus: null,
   backToTopVisible: null,
   optionCountsCache: new Map(),
   sagaTotalsCache: null
