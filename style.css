@@ -119,9 +119,10 @@ h1 {
   top: 0;
   z-index: 30;
   padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
-  background: linear-gradient(180deg, rgba(14, 12, 10, 0.96), rgba(14, 12, 10, 0.82));
-  backdrop-filter: saturate(140%) blur(12px);
-  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  /* Opaque background instead of backdrop-filter: a blur on a sticky bar forces the
+     browser to re-sample and re-blur the page behind it every scroll frame, which is
+     the single biggest scroll-jank source on mobile. */
+  background: linear-gradient(180deg, rgba(14, 12, 10, 0.99), rgba(14, 12, 10, 0.97));
 }
 
 .app-header__inner {
@@ -911,7 +912,9 @@ h1 {
   border: 1px solid var(--c-line);
   border-radius: 18px;
   background: var(--c-bg);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+  /* Smaller blur radius: large soft shadows repaint on every scroll frame; trimmed
+     to keep the lift without the per-card paint cost. */
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
 }
 
 .card-banner {
@@ -952,9 +955,9 @@ h1 {
   padding: 4px 10px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* Solid scrim instead of backdrop-filter: one live blur per card multiplies across
+     every on-screen card and tanks scroll FPS on mobile. */
+  background: rgba(0, 0, 0, 0.72);
   color: var(--c-gold);
   font-size: 10px;
   font-weight: 600;
@@ -1409,11 +1412,10 @@ h1 {
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
+  /* Solid fill instead of backdrop-filter: another per-card live blur to drop. */
+  background: rgba(40, 34, 28, 0.78);
   color: #fff;
   font-size: 18px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .movie-card--media .selection-toggle:hover { background: rgba(255, 255, 255, 0.24); }
@@ -1620,9 +1622,9 @@ h1 {
     grid-template-areas: "sort sel filt";
     gap: 8px;
     align-items: stretch;
-    background: linear-gradient(180deg, rgba(14, 12, 10, 0.97), rgba(14, 12, 10, 0.9));
-    backdrop-filter: saturate(140%) blur(10px);
-    -webkit-backdrop-filter: saturate(140%) blur(10px);
+    /* Opaque rather than blurred: this bar is sticky on mobile and stacks under the
+       header, so a backdrop-filter here means a second per-frame re-blur while scrolling. */
+    background: linear-gradient(180deg, rgba(14, 12, 10, 0.99), rgba(14, 12, 10, 0.98));
   }
   .result-summary { position: static; }
   #sortSelect { grid-area: sort; }
