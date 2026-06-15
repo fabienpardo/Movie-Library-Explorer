@@ -1522,7 +1522,10 @@ h1 {
 }
 
 @media (min-width: 1500px) {
-  .app-shell, .app-header__inner { max-width: 1240px; }
+  .app-shell, .app-header__inner { max-width: 1440px; }
+}
+
+@media (min-width: 1660px) {
   .movie-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
