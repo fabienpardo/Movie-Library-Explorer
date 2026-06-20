@@ -31,9 +31,14 @@ export function updateFilterResultCount(count) {
   el.textContent = total ? `${count} ${count > 1 ? "films" : "film"} sur ${total}` : "";
 }
 export function renderDiagnostics() {
-  const missing = ["genres", "runtime", "imdbRating", "country", "actors", "directors", "originalTitle", "position", "releaseDate"].filter(field => !state.columns[field]);
+  // COLUMNS maps each field to a fixed sheet header. Warn when the loaded sheet is
+  // missing a mapped header so a rename surfaces (and is fixed) instead of silently
+  // degrading movie IDs, filters and persisted selections.
+  const missing = state.labels.length
+    ? [...new Set(Object.values(state.columns).filter(name => name && !state.labels.includes(name)))]
+    : [];
   const lines = [
-    ...(missing.length ? [`Champs attendus manquants : ${missing.join(", ")}`] : []),
+    ...(missing.length ? [`Colonnes attendues manquantes : ${missing.join(", ")}`] : []),
     ...state.warnings
   ];
 

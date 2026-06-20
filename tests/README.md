@@ -66,15 +66,16 @@ Shared fixture setup and runner logic lives in `tests/helpers/app-hooks.js` and 
 10. Stable movie IDs prefer IMDb URLs before normalized fallback IDs.
 11. Temporary selection state stays independent from filtering.
 12. Persisted selection IDs absent from the reloaded dataset are pruned.
-13. Legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format.
-14. Selection detail DOM IDs are sanitized by a dedicated helper.
-15. Search matches real cell values only and ignores the synthetic movie ID.
-16. `escapeHtml` neutralizes HTML metacharacters for the remaining non-DOM string contexts.
-17. `parseCsv` handles quoted delimiters, escaped quotes, embedded newlines, CRLF and blank lines.
-18. `parseRuntime` and `parseDateValue` cover every supported input shape.
-19. `baseOptionCounts` memoizes per input state and recomputes when filters change.
-20. Saga filter state is included in the option-count cache key.
-21. Option-count cache size remains bounded.
+13. Selection pruning is skipped when the URL header is missing (transient mismatch safety).
+14. Legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format.
+15. Selection detail DOM IDs are sanitized by a dedicated helper.
+16. Search matches real cell values only and ignores the synthetic movie ID.
+17. `escapeHtml` neutralizes HTML metacharacters for the remaining non-DOM string contexts.
+18. `parseCsv` handles quoted delimiters, escaped quotes, embedded newlines, CRLF and blank lines.
+19. `parseRuntime` and `parseDateValue` cover every supported input shape.
+20. `baseOptionCounts` memoizes per input state and recomputes when filters change.
+21. Saga filter state is included in the option-count cache key.
+22. Option-count cache size remains bounded.
 
 ### Static asset checks
 

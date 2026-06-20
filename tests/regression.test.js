@@ -207,6 +207,25 @@ test("persisted selection IDs absent from the reloaded dataset are pruned", asyn
   assert.equal(h.selectedRows().length, 1);
 });
 
+test("selection pruning is skipped when the URL header is missing", async () => {
+  const h = await loadAppHooks();
+  const labels = ["Title", "Year", "Position"]; // URL header temporarily absent
+  const columns = h.COLUMNS;
+  const rows = [
+    { Title: "A Film", Year: "2020", Position: "1" }
+  ];
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+  // A url: selection saved from an earlier load when the URL header was present.
+  h.state.selection = new Set(["url:https://www.imdb.com/title/tt1234567/"]);
+
+  h.reconcilePersistedSelection(preparedRows, columns);
+
+  // Preserved rather than wiped: a missing mapped header may be a transient glitch.
+  assert.equal(h.state.selection.size, 1);
+  assert.ok(h.state.selection.has("url:https://www.imdb.com/title/tt1234567/"));
+});
+
 test("search filtering matches across fields and memoizes per-row search text", async () => {
   const h = await loadAppHooks();
   const { labels, rows } = h.csvToTable(readFixtureCsv());

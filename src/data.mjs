@@ -92,6 +92,14 @@ export function makeMovieId(row, index = 0, columns = state.columns) {
 export function reconcilePersistedSelection(rows = state.rows, columns = state.columns) {
   if (!state.selection.size) return;
 
+  // Only drop "orphan" IDs when the columns that define a movie's identity are
+  // actually present in the loaded sheet. If the URL header is temporarily
+  // missing/renamed, every row falls back to a title/year/position ID and the
+  // previously saved url: selections would look absent — preserving them avoids
+  // silently wiping localStorage on a transient sheet glitch. Once the sheet is
+  // healthy again, normal pruning resumes.
+  const canPrune = (state.labels || []).includes(columns.url);
+
   const aliases = new Map();
   const validIds = new Set();
   rows.forEach((row, index) => {
@@ -106,8 +114,9 @@ export function reconcilePersistedSelection(rows = state.rows, columns = state.c
     const nextId = aliases.get(id) || id;
     // Prune IDs with no matching row in the current dataset (deleted movie,
     // changed fallback key, etc.) so the badge count never claims selected films
-    // the selection panel can't show. Only runs after a successful, non-empty load.
-    if (!validIds.has(nextId)) { changed = true; continue; }
+    // the selection panel can't show. Gated on canPrune to avoid data loss when a
+    // mapped header is missing. Only runs after a successful, non-empty load.
+    if (canPrune && !validIds.has(nextId)) { changed = true; continue; }
     if (nextId !== id) changed = true;
     reconciled.add(nextId);
   }

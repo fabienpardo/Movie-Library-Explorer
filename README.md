@@ -181,7 +181,7 @@ Common test-runner, app-fixture, and browser-lifecycle logic lives under `tests/
 Current expected result:
 
 ```text
-25/25 regression scenarios passed.
+26/26 regression scenarios passed.
 11/11 static asset scenarios passed.
 16/16 browser E2E scenarios passed.
 ```
