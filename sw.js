@@ -75,14 +75,19 @@ self.addEventListener("fetch", event => {
     event.respondWith(
       caches.open(POSTERS).then(async cache => {
         const cached = await cache.match(request);
-        const network = fetch(request).then(response => {
+        const fetchAndCache = fetch(request).then(async response => {
           // Opaque (no-CORS) responses report ok=false but are still valid images.
           if (response && (response.ok || response.type === "opaque")) {
-            cache.put(request, response.clone()).then(() => trimCache(cache, POSTER_CACHE_LIMIT));
+            await cache.put(request, response.clone());
+            await trimCache(cache, POSTER_CACHE_LIMIT);
           }
           return response;
-        }).catch(() => cached);
-        return cached || network;
+        });
+        // Tie the network+write to the event lifetime so the SW isn't killed
+        // before mlx-posters is populated, even when we hand back the cached hit.
+        // Registered here while respondWith still holds the event active.
+        event.waitUntil(fetchAndCache.catch(() => {}));
+        return cached || fetchAndCache;
       })
     );
     return;
