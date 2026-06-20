@@ -44,11 +44,24 @@ body {
   overflow-x: hidden;
   color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  background: var(--bg);
+}
+
+/* Fixed gradient backdrop on its own layer. Using a position:fixed pseudo-element
+   instead of `background-attachment: fixed` on the body: iOS Safari has no true
+   fixed-background support and re-rasterizes that layer on every scroll frame,
+   which produces clipping/blanking artifacts after a long scroll. A fixed layer
+   is composited once and just stays put. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(circle at 16% -4%, rgba(122, 86, 38, 0.16), transparent 26rem),
     radial-gradient(circle at 90% 2%, rgba(61, 26, 10, 0.20), transparent 24rem),
     linear-gradient(160deg, #120f0c 0%, #0e0c0a 55%, #0b0a08 100%);
-  background-attachment: fixed;
 }
 
 body.filters-open, body.selection-open { overflow: hidden; }
