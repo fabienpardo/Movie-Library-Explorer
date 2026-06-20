@@ -80,40 +80,49 @@ export function detectColumns(labels) {
   };
 }
 
-export function rawCell(row, field, columns = state.columns) {
+export function cell(row, field, columns = state.columns) {
   const column = columns[field];
   return column ? row[column] ?? "" : "";
 }
-export function cell(row, field) { return rawCell(row, field); }
-export function normalizedMovieUrlId(row, columns = state.columns) {
-  const rawUrl = String(rawCell(row, "url", columns) || "").trim();
-  if (!rawUrl) return "";
+// Single home for the http(s)-only URL allow-list shared by movie links, poster
+// images and the URL-based movie id. Returns the normalized href or "" when the
+// value is empty, unparseable, or uses a non-web protocol.
+export function httpUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
 
   try {
-    const url = new URL(rawUrl);
+    const url = new URL(raw);
     return ["http:", "https:"].includes(url.protocol) ? url.href : "";
   } catch {
     return "";
   }
 }
+export function normalizedMovieUrlId(row, columns = state.columns) {
+  return httpUrl(cell(row, "url", columns));
+}
+// Shared title/year/position used to build both the current fallback id and the
+// legacy ids it migrates from, so the two formats can never drift apart.
+function movieIdParts(row, index = 0, columns = state.columns) {
+  const title = normalize([cell(row, "title", columns), cell(row, "originalTitle", columns)].filter(Boolean).join(" "));
+  const release = parseDateValue(cell(row, "releaseDate", columns));
+  const year = Number.isFinite(release) ? new Date(release).getUTCFullYear() : parseNumber(cell(row, "year", columns));
+  const position = parseNumber(cell(row, "position", columns));
+  return {
+    title: title || "untitled",
+    year: Number.isFinite(year) ? year : "unknown",
+    position: Number.isFinite(position) ? position : index
+  };
+}
 export function fallbackMovieId(row, index = 0, columns = state.columns) {
   // Fallback IDs are intentionally documented as less stable: spreadsheet title/year/position edits can orphan persisted selections.
-  const title = normalize([rawCell(row, "title", columns), rawCell(row, "originalTitle", columns)].filter(Boolean).join(" "));
-  const release = parseDateValue(rawCell(row, "releaseDate", columns));
-  const year = Number.isFinite(release) ? new Date(release).getUTCFullYear() : parseNumber(rawCell(row, "year", columns));
-  const position = parseNumber(rawCell(row, "position", columns));
-  return `fallback:${title || "untitled"}:${Number.isFinite(year) ? year : "unknown"}:${Number.isFinite(position) ? position : index}`;
+  const { title, year, position } = movieIdParts(row, index, columns);
+  return `fallback:${title}:${year}:${position}`;
 }
 export function legacyMovieIds(row, index = 0, columns = state.columns) {
   const url = normalizedMovieUrlId(row, columns);
-  const title = normalize([rawCell(row, "title", columns), rawCell(row, "originalTitle", columns)].filter(Boolean).join(" "));
-  const release = parseDateValue(rawCell(row, "releaseDate", columns));
-  const year = Number.isFinite(release) ? new Date(release).getUTCFullYear() : parseNumber(rawCell(row, "year", columns));
-  const position = parseNumber(rawCell(row, "position", columns));
-  return [
-    url,
-    `movie:${title || "untitled"}:${Number.isFinite(year) ? year : "unknown"}:${Number.isFinite(position) ? position : index}`
-  ].filter(Boolean);
+  const { title, year, position } = movieIdParts(row, index, columns);
+  return [url, `movie:${title}:${year}:${position}`].filter(Boolean);
 }
 export function makeMovieId(row, index = 0, columns = state.columns) {
   const url = normalizedMovieUrlId(row, columns);
@@ -143,7 +152,6 @@ export function reconcilePersistedSelection(rows = state.rows, columns = state.c
 export function movieId(row) {
   return row.__movieExplorerId || makeMovieId(row, Math.max(0, state.rows.indexOf(row)));
 }
-export function isMovieSelected(row) { return state.selection.has(movieId(row)); }
 export function listFor(row, category) { return parseList(cell(row, categories[category].column)); }
 export function displayTitle(row) { return cell(row, "title") || cell(row, "originalTitle") || "Sans titre"; }
 export function equivalentTitle(value) { return normalize(value); }
@@ -157,24 +165,10 @@ export function safeImageUrl(value) {
   if (!raw) return "";
 
   if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(raw)) return raw;
-
-  try {
-    const url = new URL(raw);
-    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
-  } catch {
-    return "";
-  }
+  return httpUrl(raw);
 }
 export function movieUrl(row) {
-  const raw = cell(row, "url").trim();
-  if (!raw) return "";
-
-  try {
-    const url = new URL(raw);
-    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
-  } catch {
-    return "";
-  }
+  return httpUrl(cell(row, "url"));
 }
 export function posterUrl(row) {
   return safeImageUrl(cell(row, "poster"));

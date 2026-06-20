@@ -22,7 +22,6 @@ import {
   displayTitle,
   equivalentTitle,
   fallbackMovieId,
-  isMovieSelected,
   legacyMovieIds,
   listFor,
   makeMovieId,
@@ -55,7 +54,7 @@ import {
   matchesList,
   optionCounts
 } from "./matching.mjs";
-import { effectiveViewMode, movieViewModel, ratingClass, syncDisplaySettings } from "./render-cards.mjs";
+import { movieViewModel, ratingClass } from "./render-cards.mjs";
 import { renderResultSummary } from "./render-filters.mjs";
 import {
   clearSelection,
@@ -84,10 +83,8 @@ export function getTestHooks() {
     detectColumns,
     displayOriginalTitle,
     displayTitle,
-    effectiveViewMode,
     equivalentTitle,
     escapeHtml,
-    isMovieSelected,
     loadPersistentState,
     makeMovieId,
     fallbackMovieId,
@@ -121,7 +118,6 @@ export function getTestHooks() {
     resetStorageAvailabilityForTests,
     resetAfterLoadFailure,
     selectedRows,
-    syncDisplaySettings,
     syncSelectionCount,
     toggleMovieSelectionById,
     toggleSelectionDetail,

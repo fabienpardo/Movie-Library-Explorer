@@ -3,7 +3,6 @@ import { cardNodeCache, els, failedPosters, loadedPosters, state } from "./state
 import {
   decodeFilterValue,
   encodeFilterValue,
-  escapeHtml,
   formatRuntime,
   mainCountry,
   parseNumber,
@@ -30,16 +29,6 @@ function filterToggleLabel(category, value) {
   return `${action} le filtre ${label} ${value}`;
 }
 
-// Single source of truth for the layout: the editorial card grid is used on every breakpoint.
-export function effectiveViewMode() {
-  return "cards";
-}
-export function syncDisplaySettings() {
-  const mode = effectiveViewMode();
-  els.movieGrid.dataset.viewMode = mode;
-  document.documentElement.dataset.viewMode = mode;
-}
-
 export function createEmptyStateNode() {
   const children = [createElement("p", { text: "Aucun film ne correspond aux filtres actuels." })];
   if (activeCount() > 0) {
@@ -50,27 +39,26 @@ export function createEmptyStateNode() {
 // Keyed reconciliation: reuse existing card nodes (and their already-loaded poster
 // images) for movies still present, refreshing only the body and the order. This
 // keeps posters from reloading when filters, search, or sort change the result set.
-function stashCardNode(id, node, mode) {
+function stashCardNode(id, node) {
   if (!id) return;
   cardNodeCache.delete(id);
-  cardNodeCache.set(id, { node, mode });
+  cardNodeCache.set(id, node);
   while (cardNodeCache.size > CARD_CACHE_LIMIT) {
     cardNodeCache.delete(cardNodeCache.keys().next().value);
   }
 }
-function takeCardNode(id, mode, row) {
+function takeCardNode(id, row) {
   const cached = cardNodeCache.get(id);
-  if (!cached || cached.mode !== mode) return null;
+  if (!cached) return null;
   cardNodeCache.delete(id);
-  updateCardContent(cached.node, row, mode);
-  return cached.node;
+  updateCardContent(cached, row);
+  return cached;
 }
 export function renderGrid(rows) {
-  const mode = effectiveViewMode();
   const grid = els.movieGrid;
   if (!rows.length) {
     for (const node of Array.from(grid.children)) {
-      if (node.dataset && node.dataset.movieId) stashCardNode(node.dataset.movieId, node, node.dataset.cardMode || mode);
+      if (node.dataset && node.dataset.movieId) stashCardNode(node.dataset.movieId, node);
     }
     grid.replaceChildren(createEmptyStateNode());
     return;
@@ -79,7 +67,7 @@ export function renderGrid(rows) {
   const reusable = new Map();
   for (const node of Array.from(grid.children)) {
     const id = node.dataset && node.dataset.movieId;
-    if (id && node.dataset.cardMode === mode) {
+    if (id) {
       reusable.set(id, node);
       cardNodeCache.delete(id);
     } else {
@@ -95,17 +83,15 @@ export function renderGrid(rows) {
       updateCardContent(live, row);
       return live;
     }
-    const pooled = takeCardNode(id, mode, row);
+    const pooled = takeCardNode(id, row);
     if (pooled) return pooled;
-    const node = createMovieCardNode(row);
-    node.dataset.cardMode = mode;
-    return node;
+    return createMovieCardNode(row);
   });
 
   // Cards no longer in the result set: keep their nodes (and painted posters) in
   // the pool so they can return without a reload, then detach from the DOM.
   for (const [id, node] of reusable) {
-    stashCardNode(id, node, mode);
+    stashCardNode(id, node);
     node.remove();
   }
 
@@ -117,7 +103,7 @@ export function renderGrid(rows) {
   }
   while (ref) {
     const next = ref.nextSibling;
-    if (ref.dataset && ref.dataset.movieId) stashCardNode(ref.dataset.movieId, ref, ref.dataset.cardMode || mode);
+    if (ref.dataset && ref.dataset.movieId) stashCardNode(ref.dataset.movieId, ref);
     ref.remove();
     ref = next;
   }
@@ -143,10 +129,8 @@ function updateCardContent(node, row) {
 export function movieViewModel(row) {
   const title = displayTitle(row);
   return {
-    row,
     id: movieId(row),
     title,
-    titleHtml: escapeHtml(title),
     originalTitle: displayOriginalTitle(row),
     url: movieUrl(row),
     posterUrl: posterUrl(row),
