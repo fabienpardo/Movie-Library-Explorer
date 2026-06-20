@@ -702,6 +702,14 @@ h1 {
   padding: 18px;
   background: var(--card);
   border-color: var(--line);
+  /* Skip rendering (layout/paint/decode) for cards scrolled off-screen. With no
+     list virtualization this is what keeps a long scroll cheap on iOS Safari:
+     only on-screen cards are painted, so the per-frame paint count and the live
+     image/layer memory stay bounded instead of growing with the whole library.
+     `auto` in contain-intrinsic-size makes the browser remember each card's real
+     height after its first render, so scrollbar position stays stable. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 520px;
 }
 
 .movie-card--with-poster {
@@ -931,7 +939,6 @@ h1 {
   height: 100%;
   object-fit: cover;
   object-position: center 18%;
-  filter: brightness(0.55) saturate(0.85);
   transform: scale(1.05);
   transition: transform 0.6s ease;
 }
@@ -941,7 +948,11 @@ h1 {
 .card-banner__scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, transparent 28%, rgba(22, 18, 16, 0.78) 78%, var(--c-bg) 100%);
+  /* A flat dark tint across the whole banner replaces the old per-image
+     `filter: brightness()` (which forced a GPU layer + re-raster per card),
+     then the gradient deepens toward the bottom for text legibility. */
+  background:
+    linear-gradient(to bottom, rgba(14, 12, 10, 0.42) 0%, transparent 28%, rgba(22, 18, 16, 0.82) 78%, var(--c-bg) 100%);
 }
 
 .franchise-badge {
