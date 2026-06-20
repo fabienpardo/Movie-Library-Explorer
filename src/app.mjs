@@ -14,7 +14,7 @@ import { csvToTable, detectColumns, makeMovieId, reconcilePersistedSelection } f
 import { sortRows } from "./sorting.mjs";
 import { byId, createElement, replaceChildren } from "./dom.mjs";
 import { clearOptionCountsCache, filteredRows } from "./matching.mjs";
-import { handlePosterError, handlePosterLoad, renderGrid, syncDisplaySettings } from "./render-cards.mjs";
+import { handlePosterError, handlePosterLoad, renderGrid } from "./render-cards.mjs";
 import {
   renderActiveFilters,
   renderDiagnostics,
@@ -151,7 +151,6 @@ function render() {
   const rows = sortRows(filteredRows());
 
   els.status.hidden = true;
-  syncDisplaySettings();
   renderResultSummary(rows);
   updateFilterResultCount(rows.length);
   renderActiveFilters();
@@ -203,7 +202,12 @@ function removeFilter(category, value) {
 
 function handleFilterViewportChange() {
   if (DESKTOP_QUERY.matches && state.filtersOpen) {
+    // Mirror closeFilters' teardown: the mobile trigger that opened the drawer is
+    // hidden on desktop, so drop the searching state and stale focus reference
+    // rather than trying to restore focus to a now-hidden control.
+    setFilterSearchFocus(false);
     state.filtersOpen = false;
+    state.lastFocus = null;
     els.filterPanel.classList.remove("is-open");
     els.filterBackdrop.hidden = true;
     document.body.classList.remove("filters-open");
@@ -345,7 +349,6 @@ export function initApp() {
   bindEvents();
   setActivePanel(state.activePanel);
   syncFilterA11y();
-  syncDisplaySettings();
   syncSelectionCount();
   syncBackToTop();
   syncHeaderHeight();

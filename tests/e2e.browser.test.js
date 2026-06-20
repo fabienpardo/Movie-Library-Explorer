@@ -31,7 +31,6 @@ test('loads the fixture and renders the library without browser errors', async (
     cardPosition: getComputedStyle(document.querySelector('.movie-card')).position,
     firstPosterSrc: document.querySelector('.movie-card .movie-poster')?.dataset.posterUrl || document.querySelector('.movie-card .movie-poster img')?.getAttribute('src'),
     posterCount: document.querySelectorAll('.movie-card .movie-poster').length,
-    gridMode: document.querySelector('#movieGrid').dataset.viewMode,
     hasMediaCard: Boolean(document.querySelector('.movie-card.movie-card--media')),
     hasCardWithPoster: Boolean(document.querySelector('.movie-card.movie-card--with-poster')),
     hasFranchiseBadge: document.querySelectorAll('.franchise-badge').length
@@ -48,7 +47,6 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.equal(snapshot.selectionButtonPosition, 'absolute');
   assert.equal(snapshot.cardPosition, 'relative');
   assert.ok(snapshot.posterCount >= 1);
-  assert.equal(snapshot.gridMode, 'cards');
   assert.equal(snapshot.hasMediaCard, true);
   assert.equal(snapshot.hasCardWithPoster, true);
   assert.ok(snapshot.hasFranchiseBadge >= 1);
@@ -251,11 +249,9 @@ test('desktop renders the editorial card grid automatically with no display-mode
   const { page } = await createPage(browserWsUrl);
   await clickFilterOptionByLabel(page, '#genreList', 'Action');
   await waitForExpression(page, `window.__MovieExplorerTestHooks.activeCount() === 1`, 'one active filter');
-  await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'cards' && document.querySelector('.movie-card--media')`, 'card grid');
+  await waitForExpression(page, `document.querySelector('.movie-card--media')`, 'card grid');
 
   const cardSnapshot = await evaluateFunction(page, () => ({
-    mode: document.querySelector('#movieGrid').dataset.viewMode,
-    effectiveMode: window.__MovieExplorerTestHooks.effectiveViewMode(),
     activeCount: window.__MovieExplorerTestHooks.activeCount(),
     mediaRows: document.querySelectorAll('.movie-card--media').length,
     listRows: document.querySelectorAll('.movie-card--list').length,
@@ -263,8 +259,6 @@ test('desktop renders the editorial card grid automatically with no display-mode
     thumbPosterRows: document.querySelectorAll('.movie-card--media .card-thumb').length,
     selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
-  assert.equal(cardSnapshot.mode, 'cards');
-  assert.equal(cardSnapshot.effectiveMode, 'cards');
   assert.equal(cardSnapshot.activeCount, 1);
   assert.ok(cardSnapshot.mediaRows > 0);
   assert.equal(cardSnapshot.listRows, 0);
@@ -275,18 +269,14 @@ test('desktop renders the editorial card grid automatically with no display-mode
 
 test('mobile renders card view automatically with no display-mode selector', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl, { mobile: true });
-  await waitForExpression(page, `document.querySelector('#movieGrid').dataset.viewMode === 'cards'`, 'mobile card view');
+  await waitForExpression(page, `document.querySelector('.movie-card--media')`, 'mobile card view');
 
   const snapshot = await evaluateFunction(page, () => ({
-    effectiveMode: window.__MovieExplorerTestHooks.effectiveViewMode(),
-    gridMode: document.querySelector('#movieGrid').dataset.viewMode,
     listRows: document.querySelectorAll('.movie-card--list').length,
     cardRows: document.querySelectorAll('.movie-card').length,
     totalRows: window.__MovieExplorerTestHooks.state.rows.length,
     selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
-  assert.equal(snapshot.effectiveMode, 'cards');
-  assert.equal(snapshot.gridMode, 'cards');
   assert.equal(snapshot.listRows, 0);
   assert.equal(snapshot.cardRows, snapshot.totalRows);
   assert.equal(snapshot.selectorExists, false);
