@@ -1,4 +1,4 @@
-import { CARD_CACHE_LIMIT, DESKTOP_QUERY, VIRTUALIZE_THRESHOLD, categories } from "./config.mjs";
+import { CARD_CACHE_LIMIT, categories } from "./config.mjs";
 import { cardNodeCache, els, failedPosters, loadedPosters, state } from "./state.mjs";
 import {
   decodeFilterValue,
@@ -54,46 +54,16 @@ function takeCardNode(id, row) {
   updateCardContent(cached, row);
   return cached;
 }
-// --- Windowed rendering (single-column / mobile only) ----------------------
-// Must stay in sync with the .movie-grid gap and a rough card height in style.css.
-const GRID_GAP = 13;
-const VIRTUAL_OVERSCAN_PX = 1400;
-const ESTIMATED_CARD_HEIGHT = 520;
-const virtual = {
-  active: false,
-  rows: null,
-  heights: [],
-  estimate: ESTIMATED_CARD_HEIGHT,
-  start: 0,
-  end: 0,
-  top: null,
-  bottom: null,
-  gridTop: 0,
-  scrollBound: false,
-  rafPending: false
-};
-function shouldVirtualize(count) {
-  // Multi-column desktop renders in full (it performs fine and content-visibility
-  // already skips off-screen work); only the tall single-column phone list windows.
-  return !DESKTOP_QUERY.matches && count > VIRTUALIZE_THRESHOLD;
-}
 export function renderGrid(rows) {
   const grid = els.movieGrid;
   if (!rows.length) {
-    stashAllCards(grid);
-    teardownVirtual();
+    for (const node of Array.from(grid.children)) {
+      if (node.dataset && node.dataset.movieId) stashCardNode(node.dataset.movieId, node);
+    }
     grid.replaceChildren(createEmptyStateNode());
     return;
   }
-  if (shouldVirtualize(rows.length)) renderGridWindowed(grid, rows);
-  else { teardownVirtual(); renderGridFull(grid, rows); }
-}
-function stashAllCards(grid) {
-  for (const node of Array.from(grid.children)) {
-    if (node.dataset && node.dataset.movieId) stashCardNode(node.dataset.movieId, node);
-  }
-}
-function renderGridFull(grid, rows) {
+
   const reusable = new Map();
   for (const node of Array.from(grid.children)) {
     const id = node.dataset && node.dataset.movieId;
@@ -137,143 +107,6 @@ function renderGridFull(grid, rows) {
     ref.remove();
     ref = next;
   }
-}
-function teardownVirtual() {
-  if (!virtual.active && !virtual.top && !virtual.bottom) return;
-  if (virtual.top) virtual.top.remove();
-  if (virtual.bottom) virtual.bottom.remove();
-  virtual.top = null;
-  virtual.bottom = null;
-  virtual.active = false;
-  virtual.rows = null;
-}
-function makeSpacer() {
-  return createElement("div", { className: "virtual-spacer", attrs: { "aria-hidden": "true" } });
-}
-function ensureSpacers(grid) {
-  if (!virtual.top || virtual.top.parentNode !== grid) {
-    virtual.top = makeSpacer();
-    grid.insertBefore(virtual.top, grid.firstChild);
-  }
-  if (!virtual.bottom || virtual.bottom.parentNode !== grid) {
-    virtual.bottom = makeSpacer();
-    grid.appendChild(virtual.bottom);
-  }
-}
-function bindVirtualScroll() {
-  if (virtual.scrollBound) return;
-  virtual.scrollBound = true;
-  const onScroll = () => {
-    if (!virtual.active || virtual.rafPending) return;
-    virtual.rafPending = true;
-    requestAnimationFrame(() => {
-      virtual.rafPending = false;
-      if (virtual.active) updateWindow(els.movieGrid, false);
-    });
-  };
-  window.addEventListener("scroll", onScroll, { passive: true });
-  window.addEventListener("resize", () => { if (virtual.active) updateWindow(els.movieGrid, true); }, { passive: true });
-}
-function renderGridWindowed(grid, rows) {
-  // A new result set (filter/sort/search) arrives as a fresh array — drop stale
-  // height measurements so the window is rebuilt against the new content.
-  if (virtual.rows !== rows) {
-    virtual.rows = rows;
-    virtual.heights = new Array(rows.length);
-    virtual.start = 0;
-    virtual.end = 0;
-  }
-  virtual.active = true;
-  ensureSpacers(grid);
-  bindVirtualScroll();
-  updateWindow(grid, true);
-}
-function strideAt(index) {
-  return (virtual.heights[index] || virtual.estimate) + GRID_GAP;
-}
-function updateWindow(grid, force) {
-  if (!virtual.active) return;
-  const rows = virtual.rows;
-  const n = rows.length;
-
-  // The grid's absolute top is stable during scroll, so only re-measure it on the
-  // forced (render/resize) calls — scroll ticks reuse the cache and never read layout.
-  if (force) virtual.gridTop = grid.getBoundingClientRect().top + window.scrollY;
-  const gridTopAbs = virtual.gridTop;
-  const relTop = window.scrollY - gridTopAbs - VIRTUAL_OVERSCAN_PX;
-  const relBottom = window.scrollY + window.innerHeight - gridTopAbs + VIRTUAL_OVERSCAN_PX;
-
-  let cum = 0;
-  let start = 0;
-  while (start < n && cum + strideAt(start) <= relTop) { cum += strideAt(start); start += 1; }
-  let end = start;
-  while (end < n && cum < relBottom) { cum += strideAt(end); end += 1; }
-
-  if (!force && start === virtual.start && end === virtual.end) return;
-  virtual.start = start;
-  virtual.end = end;
-
-  reconcileWindow(grid, rows, start, end);
-  measureWindow(start, end);
-
-  let top = 0;
-  for (let i = 0; i < start; i += 1) top += strideAt(i);
-  let bottom = 0;
-  for (let i = end; i < n; i += 1) bottom += strideAt(i);
-  // The grid inserts a gap between a spacer and its neighbouring card, so trim one
-  // gap from each non-empty spacer to keep the window aligned with the scroll offset.
-  virtual.top.style.height = `${Math.max(0, top - (start > 0 ? GRID_GAP : 0))}px`;
-  virtual.bottom.style.height = `${Math.max(0, bottom - (end < n ? GRID_GAP : 0))}px`;
-}
-function reconcileWindow(grid, rows, start, end) {
-  const live = new Map();
-  let node = virtual.top.nextSibling;
-  while (node && node !== virtual.bottom) {
-    const next = node.nextSibling;
-    const id = node.dataset && node.dataset.movieId;
-    if (id) live.set(id, node);
-    node = next;
-  }
-
-  const wanted = [];
-  for (let i = start; i < end; i += 1) {
-    const row = rows[i];
-    const id = movieId(row);
-    let el = live.get(id);
-    if (el) {
-      live.delete(id);
-      updateCardContent(el, row);
-    } else {
-      el = takeCardNode(id, row) || createMovieCardNode(row);
-    }
-    wanted.push(el);
-  }
-  // Cards that scrolled out of the window: pool them (posters survive) and detach.
-  for (const [id, el] of live) {
-    stashCardNode(id, el);
-    el.remove();
-  }
-  // Place the window in order directly after the top spacer.
-  let ref = virtual.top.nextSibling;
-  for (const el of wanted) {
-    if (el === ref) { ref = ref.nextSibling; continue; }
-    grid.insertBefore(el, ref);
-  }
-}
-function measureWindow(start, end) {
-  let measured = 0;
-  let count = 0;
-  let node = virtual.top.nextSibling;
-  let i = start;
-  while (node && node !== virtual.bottom && i < end) {
-    if (node.dataset && node.dataset.movieId) {
-      const h = node.offsetHeight;
-      if (h > 0) { virtual.heights[i] = h; measured += h; count += 1; }
-      i += 1;
-    }
-    node = node.nextSibling;
-  }
-  if (count > 0) virtual.estimate = Math.round((virtual.estimate + measured / count) / 2);
 }
 function syncCardButtonState(button, selected) {
   if (!button) return;
