@@ -45,3 +45,7 @@ export const STORAGE_KEYS = {
 };
 export const CARD_CACHE_LIMIT = 800;
 export const OPTION_COUNTS_CACHE_LIMIT = 80;
+// Above this many results, the single-column (mobile) grid renders only a scrolling
+// window of cards instead of the whole list. Multi-column desktop always renders in
+// full (it performs fine and content-visibility already skips off-screen work there).
+export const VIRTUALIZE_THRESHOLD = 50;

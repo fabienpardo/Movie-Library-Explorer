@@ -31,6 +31,10 @@ export const state = {
   lastFocus: null,
   lastSelectionFocus: null,
   backToTopVisible: null,
+  // Cached "is the page tall enough to need a back-to-top button" flag. Recomputed
+  // only on render/resize so the scroll handler never reads scrollHeight (which
+  // forces a synchronous layout on every scroll tick).
+  pageIsLong: false,
   optionCountsCache: new Map(),
   sagaTotalsCache: null
 };

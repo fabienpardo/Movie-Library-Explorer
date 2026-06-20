@@ -32,6 +32,7 @@ import {
   setActivePanel,
   setFilterSearchFocus,
   syncBackToTop,
+  updateBackToTopMetrics,
   syncFilterA11y,
   trapFilterFocus
 } from "./filter-panel.mjs";
@@ -160,7 +161,7 @@ function render() {
   syncSelectionCount();
   renderSelectionPanel();
   renderGrid(rows);
-  requestAnimationFrame(syncBackToTop);
+  requestAnimationFrame(() => { updateBackToTopMetrics(); syncBackToTop(); });
 }
 
 function setFilterSelection(category, value, selected) {
@@ -297,8 +298,14 @@ function bindEvents() {
   els.filterBackdrop.addEventListener("click", closeFilters);
   els.selectionBackdrop.addEventListener("click", closeSelectionPanel);
   els.backToTop.addEventListener("click", scrollToTop);
-  window.addEventListener("scroll", syncBackToTop, { passive: true });
-  window.addEventListener("resize", syncHeaderHeight, { passive: true });
+  // Coalesce scroll events to one rAF: syncBackToTop only reads scrollY + a cached
+  // flag, so a passive rAF-throttled handler keeps scrolling off the layout path.
+  let scrollRaf = 0;
+  window.addEventListener("scroll", () => {
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; syncBackToTop(); });
+  }, { passive: true });
+  window.addEventListener("resize", () => { syncHeaderHeight(); updateBackToTopMetrics(); syncBackToTop(); }, { passive: true });
 
   els.activeFilters.addEventListener("click", event => {
     const button = event.target.closest("button[data-filter-category]");

@@ -695,6 +695,17 @@ h1 {
 .movie-grid {
   display: grid;
   gap: 13px;
+  /* The windowed (mobile) grid manages scroll offsets via spacer heights, so let
+     it own anchoring rather than the browser shifting content as cards mount. */
+  overflow-anchor: none;
+}
+
+/* Height-only placeholders that stand in for the cards above/below the rendered
+   window when the single-column list is virtualized. */
+.virtual-spacer {
+  grid-column: 1 / -1;
+  width: 100%;
+  pointer-events: none;
 }
 
 .movie-card {
@@ -939,11 +950,16 @@ h1 {
   height: 100%;
   object-fit: cover;
   object-position: center 18%;
-  transform: scale(1.05);
-  transition: transform 0.6s ease;
 }
 
-.movie-card--media:hover .card-banner__img { transform: scale(1); }
+/* The slow banner zoom-out is a pointer affordance. Gate the transform behind a
+   real hover device: a static `transform` promotes EVERY banner to its own GPU
+   layer, and on touch (iPhone) that buys nothing but ~500 extra composited
+   layers — the dominant scroll cost in the timeline trace. */
+@media (hover: hover) and (pointer: fine) {
+  .card-banner__img { transform: scale(1.05); transition: transform 0.6s ease; }
+  .movie-card--media:hover .card-banner__img { transform: scale(1); }
+}
 
 .card-banner__scrim {
   position: absolute;
