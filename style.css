@@ -695,6 +695,17 @@ h1 {
 .movie-grid {
   display: grid;
   gap: 13px;
+  /* The windowed (mobile) grid manages scroll offsets via spacer heights, so let
+     it own anchoring rather than the browser shifting content as cards mount. */
+  overflow-anchor: none;
+}
+
+/* Height-only placeholders that stand in for the cards above/below the rendered
+   window when the single-column list is virtualized. */
+.virtual-spacer {
+  grid-column: 1 / -1;
+  width: 100%;
+  pointer-events: none;
 }
 
 .movie-card {

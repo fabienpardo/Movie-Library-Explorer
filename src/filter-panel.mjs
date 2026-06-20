@@ -18,7 +18,13 @@ export function openFilters() {
   document.body.classList.add("filters-open");
   syncFilterA11y();
   syncBackToTop();
-  requestAnimationFrame(() => els.closeFilters.focus());
+  // Move focus into the dialog for a11y — but only if it hasn't already landed on a
+  // control inside the panel by the time this frame runs. The deferred focus can be
+  // delayed a frame or two; without this guard it could steal focus back from a
+  // search field the user already tapped (which also broke first-touch selection).
+  requestAnimationFrame(() => {
+    if (state.filtersOpen && !els.filterPanel.contains(document.activeElement)) els.closeFilters.focus();
+  });
 }
 export function closeFilters() {
   setFilterSearchFocus(false);
