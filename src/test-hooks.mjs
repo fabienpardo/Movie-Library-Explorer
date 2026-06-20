@@ -1,7 +1,7 @@
 // Single home for the test surface. Importing the hook functions here (instead of in app.mjs)
 // keeps the app module free of imports-that-exist-only-for-tests. Dependency is one-directional
 // (test-hooks -> app + modules), so there is no import cycle.
-import { categories, columnAliases } from "./config.mjs";
+import { categories, COLUMNS } from "./config.mjs";
 import { loadPersistentState, resetStorageAvailabilityForTests, state } from "./state.mjs";
 import {
   escapeHtml,
@@ -17,7 +17,6 @@ import {
 import {
   cell,
   csvToTable,
-  detectColumns,
   displayOriginalTitle,
   displayTitle,
   equivalentTitle,
@@ -76,11 +75,10 @@ export function getTestHooks() {
     cell,
     clearFilters,
     clearSelection,
-    columnAliases,
+    COLUMNS,
     compare,
     csvToTable,
     dataSourceUrl,
-    detectColumns,
     displayOriginalTitle,
     displayTitle,
     equivalentTitle,

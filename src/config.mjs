@@ -9,22 +9,27 @@ export const FOCUSABLE = "a[href],button:not([disabled]),input:not([disabled]),s
 // Used by the inert fallback: includes controls even when they have already been forced to tabindex=-1.
 export const PANEL_FOCUSABLE = "a[href],button,input,select,textarea,[tabindex]";
 
-export const columnAliases = {
-  title: ["title", "movie", "movie title", "name"],
-  originalTitle: ["original title", "originaltitle", "original name", "original movie title"],
-  genres: ["genre", "genres"],
-  runtime: ["runtime", "runtime min", "runtime mins", "runtime minutes", "duration", "duration min", "duration mins", "duration minutes", "running time"],
-  year: ["year", "release year", "movie year"],
-  releaseDate: ["release date", "released", "date released", "premiere date", "theatrical release", "release"],
-  position: ["position", "library position", "library rank", "library order", "rank", "order"],
-  imdbRating: ["imdb rating", "imdb", "imdb score", "imdb rate", "imdb user rating"],
-  url: ["url", "link", "movie url", "imdb url", "imdb link", "imdb title url", "imdb page", "imdb title page"],
-  poster: ["poster", "poster url", "poster link", "cover", "cover url", "cover link", "image", "image url", "image link", "affiche", "affiche url", "affiche link"],
-  country: ["country", "countries", "production country", "production countries", "main country", "origin country", "country of origin", "nationality"],
-  actors: ["actor", "actors", "cast", "main cast", "stars", "starring", "lead actors"],
-  directors: ["director", "directors", "directed by"],
-  saga: ["saga", "saga name", "saga title", "franchise", "franchise name", "collection", "series", "serie", "saga collection"],
-  sagaOrder: ["saga order", "saga number", "saga index", "saga rank", "saga position", "franchise order", "order in saga", "part number", "chapter number"]
+// The published Google Sheet always exposes the exact column headers below (they
+// mirror the test fixture's header and never change), so columns are mapped by
+// their fixed names rather than fuzzy-detected. Fuzzy alias/substring detection
+// was removed because generic substrings (url, imdb, saga, order) mis-matched
+// sibling columns (e.g. "Poster URL" -> url, "IMDb URL" -> imdbRating).
+export const COLUMNS = {
+  title: "Title",
+  originalTitle: "Original Title",
+  genres: "Genres",
+  runtime: "Runtime (mins)",
+  year: "Year",
+  releaseDate: "Release Date",
+  position: "Position",
+  imdbRating: "IMDb Rating",
+  url: "URL",
+  poster: "Poster",
+  country: "Country",
+  actors: "Main actors",
+  directors: "Directors",
+  saga: "Saga name",
+  sagaOrder: "Saga order"
 };
 
 export const categories = {

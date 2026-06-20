@@ -21,26 +21,24 @@ test("fixture CSV parses into the expected library rows", async () => {
   assert.equal(rows[0].Title, "60 secondes chrono");
 });
 
-test("uploaded fixture columns are detected by aliases", async () => {
+test("fixed column map matches every header in the fixture", async () => {
   const h = await loadAppHooks();
   const { labels } = h.csvToTable(readFixtureCsv());
-  const detected = h.detectColumns(labels);
 
-  assert.equal(detected.columns.title, "Title");
-  assert.equal(detected.columns.originalTitle, "Original Title");
-  assert.equal(detected.columns.url, "URL");
-  assert.equal(detected.columns.poster, "Poster");
-  assert.equal(detected.columns.imdbRating, "IMDb Rating");
-  assert.equal(detected.columns.runtime, "Runtime (mins)");
-  assert.equal(detected.columns.year, "Year");
-  assert.equal(detected.columns.releaseDate, "Release Date");
-  assert.equal(detected.columns.position, "Position");
-  assert.equal(detected.columns.directors, "Directors");
-  assert.equal(detected.columns.actors, "Main actors");
-  assert.equal(detected.columns.country, "Country");
-  assert.equal(detected.columns.saga, "Saga name");
-  assert.equal(detected.columns.sagaOrder, "Saga order");
-  assert.equal(detected.warnings.length, 0);
+  // Columns are mapped by fixed name (no fuzzy detection): guard that every mapped
+  // name actually exists in the sheet header so a header rename can't go unnoticed.
+  for (const name of Object.values(h.COLUMNS)) {
+    assert.ok(labels.includes(name), `fixture header should contain "${name}"`);
+  }
+  assert.equal(h.COLUMNS.title, "Title");
+  assert.equal(h.COLUMNS.originalTitle, "Original Title");
+  assert.equal(h.COLUMNS.url, "URL");
+  assert.equal(h.COLUMNS.poster, "Poster");
+  assert.equal(h.COLUMNS.imdbRating, "IMDb Rating");
+  assert.equal(h.COLUMNS.runtime, "Runtime (mins)");
+  assert.equal(h.COLUMNS.actors, "Main actors");
+  assert.equal(h.COLUMNS.saga, "Saga name");
+  assert.equal(h.COLUMNS.sagaOrder, "Saga order");
 });
 
 test("saga totals derive from the highest order within each saga", async () => {
@@ -96,7 +94,7 @@ test("year sorting uses Release Date before Year fallback", async () => {
     { Title: "Newer same-year release", Year: "2020", "Release Date": "2020-12-31", Position: "2" },
     { Title: "Fallback year only", Year: "2021", "Release Date": "", Position: "3" }
   ];
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   resetState(h, labels, rows, columns);
 
   h.state.sort = "year-desc";
@@ -147,12 +145,9 @@ test("runtime, rating and IMDb URL helpers handle fixture values", async () => {
 });
 
 
-test("poster columns are detected and sanitized for card rendering", async () => {
+test("poster URLs are sanitized for card rendering", async () => {
   const h = await loadAppHooks();
-  const labels = ["Title", "Image Link", "Cover URL", "Poster URL"];
-  const detected = h.detectColumns(labels);
 
-  assert.equal(detected.columns.poster, "Image Link");
   assert.equal(h.safeImageUrl("https://image.tmdb.org/t/p/w342/example.jpg"), "https://image.tmdb.org/t/p/w342/example.jpg");
   assert.match(h.safeImageUrl("data:image/png;base64,iVBORw0KGgo="), /^data:image\/png;base64,/);
   assert.equal(h.safeImageUrl("javascript:alert(1)"), "");
@@ -161,7 +156,7 @@ test("poster columns are detected and sanitized for card rendering", async () =>
 test("movie IDs prefer stable IMDb URLs before normalized fallback IDs", async () => {
   const h = await loadAppHooks();
   const labels = ["Title", "Original Title", "Year", "URL", "Position"];
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   const rows = [
     { Title: "A Film", "Original Title": "A Film", Year: "2020", URL: "https://www.imdb.com/title/tt1234567/", Position: "1" },
     { Title: "L’étrange film", "Original Title": "", Year: "2021", URL: "", Position: "2" }
@@ -176,7 +171,7 @@ test("movie IDs prefer stable IMDb URLs before normalized fallback IDs", async (
 test("temporary selection state is independent from filters", async () => {
   const h = await loadAppHooks();
   const { labels, rows } = h.csvToTable(readFixtureCsv());
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
   resetState(h, labels, preparedRows, columns);
 
@@ -189,18 +184,33 @@ test("temporary selection state is independent from filters", async () => {
   assert.ok(h.filteredRows().length > 0);
 });
 
-test("missing URL columns emit a persistence-stability warning", async () => {
+test("persisted selection IDs absent from the reloaded dataset are pruned", async () => {
   const h = await loadAppHooks();
-  const detected = h.detectColumns(["Title", "Year", "Position"]);
+  const labels = ["Title", "Year", "URL", "Position"];
+  const columns = h.COLUMNS;
+  const rows = [
+    { Title: "A Film", Year: "2020", URL: "https://www.imdb.com/title/tt1234567/", Position: "1" }
+  ];
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+  // One ID still exists in the dataset; the other points at a removed movie.
+  h.state.selection = new Set([
+    "url:https://www.imdb.com/title/tt1234567/",
+    "url:https://www.imdb.com/title/tt9999999/"
+  ]);
 
-  assert.equal(detected.columns.url, null);
-  assert.ok(detected.warnings.some(message => message.includes("Aucune colonne URL/IMDb")));
+  h.reconcilePersistedSelection(preparedRows, columns);
+
+  assert.equal(h.state.selection.size, 1);
+  assert.ok(h.state.selection.has("url:https://www.imdb.com/title/tt1234567/"));
+  assert.ok(!h.state.selection.has("url:https://www.imdb.com/title/tt9999999/"));
+  assert.equal(h.selectedRows().length, 1);
 });
 
 test("search filtering matches across fields and memoizes per-row search text", async () => {
   const h = await loadAppHooks();
   const { labels, rows } = h.csvToTable(readFixtureCsv());
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
   resetState(h, labels, preparedRows, columns);
 
@@ -218,7 +228,7 @@ test("search filtering matches across fields and memoizes per-row search text", 
 test("search is scoped to fixed metadata fields and ignores other columns", async () => {
   const h = await loadAppHooks();
   const labels = ["Title", "URL", "Notes"];
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   const rows = [
     { Title: "Alpha", URL: "https://www.imdb.com/title/tt1/", Notes: "zzqqxx synopsis token" }
   ];
@@ -243,7 +253,7 @@ test("search is scoped to fixed metadata fields and ignores other columns", asyn
 test("legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format", async () => {
   const h = await loadAppHooks();
   const labels = ["Title", "Year", "URL", "Position"];
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   const rows = [
     { Title: "A Film", Year: "2020", URL: "https://www.imdb.com/title/tt1234567/", Position: "1" },
     { Title: "Fallback Film", Year: "2021", URL: "", Position: "2" }
@@ -269,7 +279,7 @@ test("safe DOM IDs are deterministic and do not need HTML escaping first", async
 test("search matches real cell values only and ignores the synthetic movie ID", async () => {
   const h = await loadAppHooks();
   const labels = ["Title", "URL", "Position"];
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   const rows = [
     { Title: "Le Voyage", URL: "https://www.imdb.com/title/tt0187078/", Position: "1" },
     { Title: "Mon Film", URL: "", Position: "2" }
@@ -366,11 +376,11 @@ test("baseOptionCounts cache includes saga filter state", async () => {
 
 test("baseOptionCounts cache is bounded", async () => {
   const h = await loadAppHooks();
-  const labels = ["Title", "Genres", "Actors", "Directors"];
-  const { columns } = h.detectColumns(labels);
+  const labels = ["Title", "Genres", "Main actors", "Directors"];
+  const columns = h.COLUMNS;
   const rows = [
-    { Title: "A", Genres: "Drama", Actors: "Actor A", Directors: "Director A" },
-    { Title: "B", Genres: "Comedy", Actors: "Actor B", Directors: "Director B" }
+    { Title: "A", Genres: "Drama", "Main actors": "Actor A", Directors: "Director A" },
+    { Title: "B", Genres: "Comedy", "Main actors": "Actor B", Directors: "Director B" }
   ];
   resetState(h, labels, rows, columns);
 

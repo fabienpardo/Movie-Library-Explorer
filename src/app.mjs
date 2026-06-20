@@ -6,11 +6,12 @@ import {
   TEST_MISSING_CSV_URL,
   categories,
   categoryKeys,
-  searchableCategories
+  searchableCategories,
+  COLUMNS
 } from "./config.mjs";
 import { cardNodeCache, els, loadPersistentState, state } from "./state.mjs";
 import { decodeFilterValue } from "./utils.mjs";
-import { csvToTable, detectColumns, makeMovieId, reconcilePersistedSelection } from "./data.mjs";
+import { csvToTable, makeMovieId, reconcilePersistedSelection } from "./data.mjs";
 import { sortRows } from "./sorting.mjs";
 import { byId, createElement, replaceChildren } from "./dom.mjs";
 import { clearOptionCountsCache, filteredRows } from "./matching.mjs";
@@ -105,21 +106,22 @@ export async function loadSheet() {
     if (/<!doctype html|<html[\s>]/i.test(text)) throw new Error("Google a renvoyé du HTML au lieu du CSV. Vérifiez que l’onglet est toujours publié.");
 
     const { labels, rows } = csvToTable(text);
-    const detected = detectColumns(labels);
     const usableRows = rows
       .filter(row => Object.values(row).some(value => String(value || "").trim()))
-      .map((row, index) => ({ ...row, __movieExplorerId: makeMovieId(row, index, detected.columns) }));
+      .map((row, index) => ({ ...row, __movieExplorerId: makeMovieId(row, index, COLUMNS) }));
     Object.assign(state, {
       labels,
       rows: usableRows,
-      columns: detected.columns,
-      warnings: detected.warnings
+      columns: COLUMNS,
+      warnings: []
     });
+    // showLoading() already emptied the grid and this clears the reuse pool, so
+    // renderGrid rebuilds every card from the freshly loaded rows (no stale reuse).
     cardNodeCache.clear();
     // The counts cache key omits rows/columns, so invalidate it whenever a new dataset is loaded.
     clearOptionCountsCache();
     state.sagaTotalsCache = null;
-    reconcilePersistedSelection(usableRows, detected.columns);
+    reconcilePersistedSelection(usableRows, COLUMNS);
 
     renderDiagnostics();
     render();

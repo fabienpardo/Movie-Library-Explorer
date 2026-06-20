@@ -38,7 +38,7 @@ To change the source, publish the Google Sheet to the web as CSV, then update `P
 
 ## Expected columns
 
-Column detection is alias-based, so exact names can vary. The current fixture uses these columns:
+Columns are mapped by fixed name in `COLUMNS` (`src/config.mjs`): the published sheet always uses the exact headers below (matching the test fixture), so there is no fuzzy detection. The columns are:
 
 | Purpose | Current column |
 |---|---|
@@ -58,7 +58,7 @@ Column detection is alias-based, so exact names can vary. The current fixture us
 | Saga order | `Saga order` |
 | Poster image | `Poster` |
 
-If a column is missing, the app still loads and shows diagnostics when the missing column affects stable IDs or user-facing features.
+If a header in the sheet is renamed, update `COLUMNS` to match; a regression test guards that every mapped name exists in the fixture header.
 
 ## Sorting
 
@@ -119,11 +119,18 @@ index.html
 style.css
 script.js                  # thin browser entry point
 src/
-  app.mjs                  # app orchestration, rendering, events, filter-panel behavior
-  config.mjs               # sheet URL, constants, aliases, category config
-  data.mjs                 # CSV parsing, column detection, row/cell helpers, movie IDs, saga helpers
+  app.mjs                  # app orchestration, data loading, events, viewport behavior
+  config.mjs               # sheet URL, constants, fixed COLUMNS map, category config
+  data.mjs                 # CSV parsing, row/cell helpers, movie IDs, saga helpers
+  dom.mjs                  # element creation and child-replacement helpers
+  filter-panel.mjs         # filter drawer open/close, focus trap, back-to-top
+  matching.mjs             # filtering, option counts, active-filter derivation
+  render-cards.mjs         # movie view model, card DOM, grid reconciliation, poster state
+  render-filters.mjs       # filter lists, summary, diagnostics, control sync
+  selection.mjs            # temporary selection state, panel, count sync
   sorting.mjs              # sort labels, normalized title sorting, comparison logic
   state.mjs                # shared state, DOM cache, poster caches, localStorage persistence
+  test-hooks.mjs           # test surface (installs window.__MovieExplorerTestHooks)
   utils.mjs                # pure formatting, parsing, normalization, HTML/DOM safety helpers
 manifest.webmanifest
 icons
@@ -174,13 +181,13 @@ Common test-runner, app-fixture, and browser-lifecycle logic lives under `tests/
 Current expected result:
 
 ```text
-24/24 regression scenarios passed.
-10/10 static asset scenarios passed.
-15/15 browser E2E scenarios passed.
+25/25 regression scenarios passed.
+11/11 static asset scenarios passed.
+16/16 browser E2E scenarios passed.
 ```
 
 ## Deployment
 
 The app can be deployed as static files on GitHub Pages.
 
-When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.0`, and the static asset test validates that version alignment.
+When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.3`, and the static asset test validates that version alignment.

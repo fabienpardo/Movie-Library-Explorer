@@ -133,7 +133,7 @@
 
     <div id="filterBackdrop" class="filter-backdrop" hidden></div>
 
-    <section class="content-panel" aria-live="polite">
+    <section class="content-panel">
       <div class="mobile-toolbar">
         <label class="visually-hidden" for="sortSelect">Trier les films</label>
         <select id="sortSelect">
@@ -158,9 +158,9 @@
         </button>
       </div>
 
-      <div id="status" class="status-message">Chargement de la bibliothèque…</div>
+      <div id="status" class="status-message" role="status" aria-live="polite">Chargement de la bibliothèque…</div>
       <div id="diagnostics" class="diagnostics" hidden></div>
-      <div id="resultSummary" class="result-summary" hidden></div>
+      <div id="resultSummary" class="result-summary" aria-live="polite" hidden></div>
       <div id="activeFilters" class="active-filters"></div>
       <div id="movieGrid" class="movie-grid"></div>
     </section>

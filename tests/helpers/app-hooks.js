@@ -71,7 +71,7 @@ function readFixtureCsv() {
 async function loadFixtureState() {
   const h = await loadAppHooks();
   const { labels, rows } = h.csvToTable(readFixtureCsv());
-  const { columns } = h.detectColumns(labels);
+  const columns = h.COLUMNS;
   resetState(h, labels, rows, columns);
   return { h, labels, rows, columns };
 }

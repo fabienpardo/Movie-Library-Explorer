@@ -39,7 +39,7 @@ export function renderDiagnostics() {
 
   els.diagnostics.hidden = !lines.length;
   els.diagnostics.textContent = lines.length
-    ? ["Avertissement de détection des colonnes.", ...lines, `Colonnes détectées : ${state.labels.join(", ")}`, "Mettez à jour columnAliases dans src/config.mjs si nécessaire."].join("\n")
+    ? ["Avertissement de colonnes.", ...lines, `Colonnes du fichier : ${state.labels.join(", ")}`, "Mettez à jour COLUMNS dans src/config.mjs si nécessaire."].join("\n")
     : "";
 }
 
