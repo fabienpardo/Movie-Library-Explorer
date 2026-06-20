@@ -6,6 +6,10 @@ const CACHE_PREFIX = "mlx-";
 const VERSION = "mlx-8.8.3";
 const SHELL = VERSION + "-shell";
 const DATA = VERSION + "-data";
+// Poster images are immutable per URL, so they live in a version-independent cache
+// that survives app deploys (no point re-downloading them on every version bump).
+const POSTERS = CACHE_PREFIX + "posters";
+const POSTER_CACHE_LIMIT = 600;
 
 // Core app shell. Query strings must match how index.html references each asset so the
 // precache keys line up with the runtime requests the browser makes.
@@ -46,15 +50,43 @@ self.addEventListener("activate", event => {
     caches.keys()
       // Only purge this app's own old caches: CacheStorage is origin-wide, so a
       // bare "not current version" filter would wipe other apps on a shared origin.
-      .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && !key.startsWith(VERSION)).map(key => caches.delete(key))))
+      // Keep POSTERS: it is intentionally version-independent.
+      .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== POSTERS && !key.startsWith(VERSION)).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
+
+// FIFO-trim a cache down to `limit` entries. Cache.keys() preserves insertion
+// order, so the oldest-stored posters are evicted first.
+async function trimCache(cache, limit) {
+  const keys = await cache.keys();
+  for (let i = 0; i < keys.length - limit; i++) await cache.delete(keys[i]);
+}
 
 self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+
+  // Cross-origin poster images (URLs come straight from the sheet) -> cache-first,
+  // refresh in the background, capped so the store can't grow without bound. This is
+  // the only persistence posters get: same-origin/SW logic below never sees them.
+  if (url.origin !== self.location.origin && request.destination === "image") {
+    event.respondWith(
+      caches.open(POSTERS).then(async cache => {
+        const cached = await cache.match(request);
+        const network = fetch(request).then(response => {
+          // Opaque (no-CORS) responses report ok=false but are still valid images.
+          if (response && (response.ok || response.type === "opaque")) {
+            cache.put(request, response.clone()).then(() => trimCache(cache, POSTER_CACHE_LIMIT));
+          }
+          return response;
+        }).catch(() => cached);
+        return cached || network;
+      })
+    );
+    return;
+  }
 
   // Published Google Sheet CSV.
   if (url.hostname.endsWith("docs.google.com")) {
