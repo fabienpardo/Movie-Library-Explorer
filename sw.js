@@ -56,9 +56,32 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
 
-  // Published Google Sheet CSV -> stale-while-revalidate: serve the last copy instantly,
-  // refresh in the background, and keep working offline once it has been seen.
+  // Published Google Sheet CSV.
   if (url.hostname.endsWith("docs.google.com")) {
+    // The app fetches the CSV with cache:"no-store" (incl. "Recharger les données"),
+    // which signals it wants fresh data -> network-first: return the live sheet and
+    // refresh the cache, falling back to the cached copy only when offline. Without
+    // this, stale-while-revalidate would hand back the old CSV and the manual reload
+    // would show stale data until a second reload.
+    if (request.cache === "no-store" || request.cache === "reload") {
+      event.respondWith(
+        caches.open(DATA).then(async cache => {
+          try {
+            const response = await fetch(request);
+            if (response && response.ok) cache.put(request, response.clone());
+            return response;
+          } catch (error) {
+            const cached = await cache.match(request);
+            if (cached) return cached;
+            throw error;
+          }
+        })
+      );
+      return;
+    }
+
+    // Any other consumer -> stale-while-revalidate: serve the last copy instantly,
+    // refresh in the background, and keep working offline once it has been seen.
     event.respondWith(
       caches.open(DATA).then(async cache => {
         const cached = await cache.match(request);

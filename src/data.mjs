@@ -1,4 +1,4 @@
-import { categories, columnAliases } from "./config.mjs";
+import { categories } from "./config.mjs";
 import { persistSelection, state } from "./state.mjs";
 import { normalize, parseDateValue, parseList, parseNumber } from "./utils.mjs";
 
@@ -39,45 +39,6 @@ export function csvToTable(text) {
   const labels = records[0].map((label, index) => String(label || "").replace(/^\uFEFF/, "").trim() || `Colonne ${index + 1}`);
   const rows = records.slice(1).map(record => Object.fromEntries(labels.map((label, index) => [label, record[index] ?? ""])));
   return { labels, rows };
-}
-
-export function detectColumns(labels) {
-  const normalized = labels.map(raw => ({ raw, norm: normalize(raw) }));
-  const pick = (aliases, exclusions = []) => {
-    const aliasNorms = aliases.map(normalize);
-    const excluded = exclusions.map(normalize);
-    const candidates = normalized.filter(item => !excluded.some(ex => item.norm === ex || item.norm.includes(ex)));
-    return candidates.find(item => aliasNorms.includes(item.norm))?.raw
-      || candidates.find(item => aliasNorms.some(alias => item.norm.includes(alias)))?.raw
-      || null;
-  };
-
-  const title = pick(columnAliases.title, columnAliases.originalTitle);
-  const url = pick(columnAliases.url);
-  const warnings = [];
-  if (!title) warnings.push(`La colonne de titre n’a pas été détectée. Utilisation de la première colonne : "${labels[0]}".`);
-  if (!url) warnings.push("Aucune colonne URL/IMDb n’a été détectée. La sélection temporaire reste disponible, mais sa persistance utilise un identifiant de secours moins stable basé sur le titre, l’année et la position.");
-
-  return {
-    columns: {
-      title: title || labels[0],
-      originalTitle: pick(columnAliases.originalTitle),
-      genres: pick(columnAliases.genres),
-      runtime: pick(columnAliases.runtime),
-      year: pick(columnAliases.year),
-      releaseDate: pick(columnAliases.releaseDate),
-      position: pick(columnAliases.position),
-      imdbRating: pick(columnAliases.imdbRating),
-      url,
-      poster: pick(columnAliases.poster),
-      country: pick(columnAliases.country),
-      actors: pick(columnAliases.actors),
-      directors: pick(columnAliases.directors),
-      saga: pick(columnAliases.saga),
-      sagaOrder: pick(columnAliases.sagaOrder)
-    },
-    warnings
-  };
 }
 
 export function cell(row, field, columns = state.columns) {
@@ -131,9 +92,19 @@ export function makeMovieId(row, index = 0, columns = state.columns) {
 export function reconcilePersistedSelection(rows = state.rows, columns = state.columns) {
   if (!state.selection.size) return;
 
+  // Only drop "orphan" IDs when the columns that define a movie's identity are
+  // actually present in the loaded sheet. If the URL header is temporarily
+  // missing/renamed, every row falls back to a title/year/position ID and the
+  // previously saved url: selections would look absent — preserving them avoids
+  // silently wiping localStorage on a transient sheet glitch. Once the sheet is
+  // healthy again, normal pruning resumes.
+  const canPrune = (state.labels || []).includes(columns.url);
+
   const aliases = new Map();
+  const validIds = new Set();
   rows.forEach((row, index) => {
     const nextId = makeMovieId(row, index, columns);
+    validIds.add(nextId);
     legacyMovieIds(row, index, columns).forEach(oldId => aliases.set(oldId, nextId));
   });
 
@@ -141,6 +112,11 @@ export function reconcilePersistedSelection(rows = state.rows, columns = state.c
   const reconciled = new Set();
   for (const id of state.selection) {
     const nextId = aliases.get(id) || id;
+    // Prune IDs with no matching row in the current dataset (deleted movie,
+    // changed fallback key, etc.) so the badge count never claims selected films
+    // the selection panel can't show. Gated on canPrune to avoid data loss when a
+    // mapped header is missing. Only runs after a successful, non-empty load.
+    if (canPrune && !validIds.has(nextId)) { changed = true; continue; }
     if (nextId !== id) changed = true;
     reconciled.add(nextId);
   }

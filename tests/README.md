@@ -55,7 +55,7 @@ External HTTP(S) requests are blocked during E2E runs. `window.fetch` is replace
 Shared fixture setup and runner logic lives in `tests/helpers/app-hooks.js` and `tests/helpers/test-runner.js`; the regression file keeps the scenario assertions only.
 
 1. The fixture CSV can be parsed.
-2. The app detects the expected movie-library columns.
+2. The fixed column map matches every header in the fixture.
 3. Default `Position` descending sort returns the latest library positions first.
 4. Title sorting/comparison ignores leading articles, case, accents and edge punctuation.
 5. Duplicate original titles are hidden after normalization.
@@ -65,16 +65,17 @@ Shared fixture setup and runner logic lives in `tests/helpers/app-hooks.js` and 
 9. Runtime formatting, IMDb rating classes and IMDb URL validation still work.
 10. Stable movie IDs prefer IMDb URLs before normalized fallback IDs.
 11. Temporary selection state stays independent from filtering.
-12. Missing URL columns emit a persistence-stability warning.
-13. Legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format.
-14. Selection detail DOM IDs are sanitized by a dedicated helper.
-15. Search matches real cell values only and ignores the synthetic movie ID.
-16. `escapeHtml` neutralizes HTML metacharacters for the remaining non-DOM string contexts.
-17. `parseCsv` handles quoted delimiters, escaped quotes, embedded newlines, CRLF and blank lines.
-18. `parseRuntime` and `parseDateValue` cover every supported input shape.
-19. `baseOptionCounts` memoizes per input state and recomputes when filters change.
-20. Saga filter state is included in the option-count cache key.
-21. Option-count cache size remains bounded.
+12. Persisted selection IDs absent from the reloaded dataset are pruned.
+13. Selection pruning is skipped when the URL header is missing (transient mismatch safety).
+14. Legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format.
+15. Selection detail DOM IDs are sanitized by a dedicated helper.
+16. Search matches real cell values only and ignores the synthetic movie ID.
+17. `escapeHtml` neutralizes HTML metacharacters for the remaining non-DOM string contexts.
+18. `parseCsv` handles quoted delimiters, escaped quotes, embedded newlines, CRLF and blank lines.
+19. `parseRuntime` and `parseDateValue` cover every supported input shape.
+20. `baseOptionCounts` memoizes per input state and recomputes when filters change.
+21. Saga filter state is included in the option-count cache key.
+22. Option-count cache size remains bounded.
 
 ### Static asset checks
 

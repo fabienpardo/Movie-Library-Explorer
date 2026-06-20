@@ -142,7 +142,7 @@ test('robustness cleanup helpers are present', () => {
     [/function reconcilePersistedSelection/, 'selection reconciliation should exist'],
     [/function fallbackMovieId/, 'fallback ID helper should exist'],
     [/localStorage\.setItem\(probeKey/, 'storage availability probe should exist'],
-    [/Aucune colonne URL\/IMDb/, 'missing URL warning should exist']
+    [/export const COLUMNS\s*=/, 'fixed column map should exist']
   ], 'match');
 });
 
