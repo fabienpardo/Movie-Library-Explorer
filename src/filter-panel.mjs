@@ -90,9 +90,15 @@ export function setFilterSearchFocus(isFocused) {
   }, 80);
 }
 
+// Recompute the page-length flag. Reads scrollHeight (a forced layout) so it must
+// only run off the scroll hot path — on render and resize, when layout changes anyway.
+export function updateBackToTopMetrics() {
+  state.pageIsLong = document.documentElement.scrollHeight > window.innerHeight * 1.5;
+}
 export function syncBackToTop() {
-  const pageIsLong = document.documentElement.scrollHeight > window.innerHeight * 1.5;
-  const visible = pageIsLong && window.scrollY > 700 && !state.filtersOpen;
+  // Only reads scrollY (already known to the scroller) and the cached flag, so it
+  // is safe to call on every rAF-coalesced scroll event without forcing layout.
+  const visible = state.pageIsLong && window.scrollY > 700 && !state.filtersOpen;
   if (visible === state.backToTopVisible) return;
   state.backToTopVisible = visible;
   els.backToTop.hidden = !visible;
