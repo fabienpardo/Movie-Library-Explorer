@@ -45,15 +45,19 @@ body {
   background: var(--bg);
 }
 
-/* Fixed gradient backdrop on its own layer. Using a position:fixed pseudo-element
-   instead of `background-attachment: fixed` on the body: iOS Safari has no true
-   fixed-background support and re-rasterizes that layer on every scroll frame,
-   which produces clipping/blanking artifacts after a long scroll. A fixed layer
-   is composited once and just stays put. */
+/* Gradient backdrop — NOT fixed. A position:fixed full-viewport layer behind the
+   scroll forces iOS Safari to re-blend/repaint the whole screen every frame
+   (measured ~97ms/frame, ~9fps) and layer-promotion doesn't rescue it. So anchor
+   the warm glow to the top of the page as an absolutely-positioned band that just
+   scrolls away; the near-uniform dark `body` background (var(--bg)) carries the
+   rest. Scrolling is then a cheap GPU translate with no per-frame repaint. */
 body::before {
   content: "";
-  position: fixed;
-  inset: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
   z-index: -1;
   pointer-events: none;
   background:
@@ -695,17 +699,6 @@ h1 {
 .movie-grid {
   display: grid;
   gap: 13px;
-  /* The windowed (mobile) grid manages scroll offsets via spacer heights, so let
-     it own anchoring rather than the browser shifting content as cards mount. */
-  overflow-anchor: none;
-}
-
-/* Height-only placeholders that stand in for the cards above/below the rendered
-   window when the single-column list is virtualized. */
-.virtual-spacer {
-  grid-column: 1 / -1;
-  width: 100%;
-  pointer-events: none;
 }
 
 .movie-card {
@@ -933,7 +926,10 @@ h1 {
   background: var(--c-bg);
   /* Smaller blur radius: large soft shadows repaint on every scroll frame; trimmed
      to keep the lift without the per-card paint cost. */
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+  /* Tight shadow, not a soft 24px blur: a large blur re-rasterizes a big surface on
+     every scroll frame (measured the single biggest GPU cost in card scrolling). The
+     1px border already provides edge definition; this just adds a subtle lift. */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .card-banner {
@@ -1026,7 +1022,7 @@ h1 {
   margin: 0;
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: 9px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
   background: linear-gradient(170deg, #2a1f10, #1a1208);
   /* No skeleton shimmer on the small thumb. */
   animation: none;

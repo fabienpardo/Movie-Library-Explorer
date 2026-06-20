@@ -274,18 +274,11 @@ test('mobile renders card view automatically with no display-mode selector', asy
   const snapshot = await evaluateFunction(page, () => ({
     listRows: document.querySelectorAll('.movie-card--list').length,
     cardRows: document.querySelectorAll('.movie-card').length,
-    spacers: document.querySelectorAll('.movie-grid > .virtual-spacer').length,
     totalRows: window.__MovieExplorerTestHooks.state.rows.length,
-    summary: document.querySelector('#resultSummary').textContent.replace(/\s+/g, ' ').trim(),
     selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
   assert.equal(snapshot.listRows, 0);
-  // The single-column phone grid is virtualized: it renders a scrolling window of
-  // cards (with two spacers) rather than every row, but the summary still reports
-  // the full count.
-  assert.equal(snapshot.spacers, 2);
-  assert.ok(snapshot.cardRows > 0 && snapshot.cardRows < snapshot.totalRows);
-  assert.match(snapshot.summary, new RegExp(`${snapshot.totalRows}\\s*\\/\\s*${snapshot.totalRows} films affichés`));
+  assert.equal(snapshot.cardRows, snapshot.totalRows);
   assert.equal(snapshot.selectorExists, false);
 });
 

@@ -146,8 +146,30 @@ export function safeImageUrl(value) {
 export function movieUrl(row) {
   return httpUrl(cell(row, "url"));
 }
+// The sheet links full-resolution poster art (often 2000x3000, up to 2560x3840).
+// Cards only ever show it in a ~440px banner and a 78px thumb, so decoding and
+// GPU-compositing 20MB+ textures per poster wrecks scroll on a phone. Both CDNs we
+// see (Apple mzstatic, Amazon) resize via the URL — ask them for a card-sized copy.
+const POSTER_DISPLAY_WIDTH = 600;
+export function resizePosterUrl(url, width = POSTER_DISPLAY_WIDTH) {
+  if (!url || /^data:/i.test(url)) return url;
+  // Apple mzstatic: dimensions are the leading "{w}x{h}" of the last path segment
+  // (e.g. .../2000x3000bb.jpg, .../800x1200CA.TVA23C01.jpg). Swap them, keep aspect + the crop/format suffix.
+  if (/mzstatic\.com/i.test(url)) {
+    const slash = url.lastIndexOf("/");
+    const seg = url.slice(slash + 1);
+    const m = seg.match(/^(\d+)x(\d+)/);
+    if (m) {
+      const h = Math.round(width * (Number(m[2]) / Number(m[1])));
+      return url.slice(0, slash + 1) + `${width}x${h}` + seg.slice(m[0].length);
+    }
+  }
+  // Amazon m.media-amazon: "_UX936_" / "_UY..._" / "_SX..._" size token -> request our width.
+  if (/media-amazon\.com/i.test(url)) return url.replace(/_(?:U[XY]|S[XY])\d+_/i, `_UX${width}_`);
+  return url;
+}
 export function posterUrl(row) {
-  return safeImageUrl(cell(row, "poster"));
+  return resizePosterUrl(safeImageUrl(cell(row, "poster")));
 }
 export function sagaName(row) { return cell(row, "saga").trim(); }
 export function sagaOrder(row) {
