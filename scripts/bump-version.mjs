@@ -40,5 +40,12 @@ for (const file of ["index.html", "manifest.webmanifest", "sw.js"]) {
   writeFileSync(path, updated);
 }
 
-console.log(`Bumped ${prev} → ${next} (package.json, index.html, manifest.webmanifest, sw.js).`);
+// README documents the expected asset version in prose; keep it in lockstep so the
+// docs can't drift from the code (the only place the bare version appears in README).
+const readmePath = join(root, "README.md");
+const readme = readFileSync(readmePath, "utf8");
+const updatedReadme = readme.replaceAll(`expected asset version is \`${prev}\``, `expected asset version is \`${next}\``);
+writeFileSync(readmePath, updatedReadme);
+
+console.log(`Bumped ${prev} → ${next} (package.json, index.html, manifest.webmanifest, sw.js, README.md).`);
 console.log("Run `npm test` to confirm everything is aligned.");

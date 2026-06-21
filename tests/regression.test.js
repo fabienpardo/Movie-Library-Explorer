@@ -75,6 +75,9 @@ test("title and duplicate-title normalization handle articles, accents and edge 
 
   assert.equal(h.sortableTitle("L’armée des ombres"), h.sortableTitle("armée des ombres"));
   assert.equal(h.sortableTitle("(The Matrix)"), h.sortableTitle("Matrix"));
+  // Sorting is accent-insensitive: "Éclair" must collapse to the same key as "Eclair".
+  assert.equal(h.sortableTitle("Éclair"), h.sortableTitle("Eclair"));
+  assert.equal(h.normalizeSortText("àéîõü"), "aeiou");
   assert.equal(h.equivalentTitle("36 Quai des Orfèvres"), h.equivalentTitle("36 quai des orfevres"));
 });
 

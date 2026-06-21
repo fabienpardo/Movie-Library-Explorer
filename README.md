@@ -2,7 +2,7 @@
 
 Static, browser-only movie-library explorer for a published Google Sheet CSV.
 
-The app is built for GitHub Pages: no backend, no bundler, and no runtime npm dependencies. It loads the CSV directly in the browser, detects the relevant columns, then renders a card grid with search, sorting, filters, IMDb links, posters, saga badges, and a temporary local selection panel.
+The app is built for GitHub Pages: no backend, no bundler, and no runtime npm dependencies. It loads the CSV directly in the browser, maps the relevant columns by fixed name, then renders a card grid with search, sorting, filters, IMDb links, posters, saga badges, and a temporary local selection panel.
 
 ## Current behavior
 
@@ -190,4 +190,4 @@ Current expected result:
 
 The app can be deployed as static files on GitHub Pages.
 
-When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.3`, and the static asset test validates that version alignment.
+When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.8`, and the static asset test validates that version alignment.

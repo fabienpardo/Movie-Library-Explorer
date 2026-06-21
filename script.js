@@ -1,6 +1,10 @@
-import("./src/test-hooks.mjs").then(({ initApp, installTestHooks }) => {
+// Production entry point: boot the app directly. The test surface
+// (window.__MovieExplorerTestHooks) is intentionally NOT imported here — both the
+// unit suite (tests/helpers/app-hooks.js) and the E2E harness
+// (tests/browser-test-utils.js) import src/test-hooks.mjs from source themselves,
+// so production never has to expose internal state and mutation helpers.
+import("./src/app.mjs").then(({ initApp }) => {
   if (typeof window === "undefined") return;
-  installTestHooks(window);
   if (!window.MOVIE_EXPLORER_SKIP_AUTO_INIT) initApp();
 }).catch(error => {
   console.error("Movie Explorer failed to start", error);

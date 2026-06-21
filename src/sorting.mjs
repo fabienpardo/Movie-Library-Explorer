@@ -21,7 +21,11 @@ export function stripLeadingArticle(value) {
     .trim();
 }
 export function normalizeSortText(value) {
+  // Strip diacritics so accented titles rank alongside their unaccented form
+  // (e.g. "Éclair" sorts with "Eclair"). Same NFD idiom as utils.normalize/toSafeDomId.
   return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[\p{P}\p{S}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
