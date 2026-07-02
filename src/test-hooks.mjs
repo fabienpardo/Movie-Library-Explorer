@@ -53,7 +53,7 @@ import {
   matchesList,
   optionCounts
 } from "./matching.mjs";
-import { movieViewModel, ratingClass } from "./render-cards.mjs";
+import { movieViewModel, posterPriorityForIndex, ratingClass } from "./render-cards.mjs";
 import { renderResultSummary } from "./render-filters.mjs";
 import {
   clearSelection,
@@ -110,6 +110,7 @@ export function getTestHooks() {
     parseList,
     parseNumber,
     parseRuntime,
+    posterPriorityForIndex,
     ratingClass,
     renderResultSummary,
     reconcilePersistedSelection,

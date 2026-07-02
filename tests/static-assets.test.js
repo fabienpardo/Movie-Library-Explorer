@@ -87,6 +87,11 @@ test('cache-busting versions are aligned with the current package version', () =
   assert.deepEqual([...new Set(versionMatches)], [packageVersion]);
 });
 
+test('index preconnects to known poster CDNs for cold loads', () => {
+  assert.match(indexHtml, /<link\s+rel="preconnect"\s+href="https:\/\/is1-ssl\.mzstatic\.com"\s*\/>/);
+  assert.match(indexHtml, /<link\s+rel="preconnect"\s+href="https:\/\/m\.media-amazon\.com"\s*\/>/);
+});
+
 test('removed UI features and fragile selectors do not leave obsolete code paths', () => {
   assertPatternSet(`${indexHtml}\n${styleCss}\n${appSource()}`, [
     [/\.summary-card|class=["'][^"']*summary-card/, 'summary cards should stay removed'],
