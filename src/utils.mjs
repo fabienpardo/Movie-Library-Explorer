@@ -32,13 +32,21 @@ export function parseDateValue(value) {
   if (!raw) return Number.NaN;
 
   const iso = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
-  if (iso) return Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  if (iso) return strictUtcDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
 
   const dayFirst = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
-  if (dayFirst) return Date.UTC(Number(dayFirst[3]), Number(dayFirst[2]) - 1, Number(dayFirst[1]));
+  if (dayFirst) return strictUtcDate(Number(dayFirst[3]), Number(dayFirst[2]), Number(dayFirst[1]));
 
   const parsed = Date.parse(raw);
   return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function strictUtcDate(year, month, day) {
+  const timestamp = Date.UTC(year, month - 1, day);
+  const date = new Date(timestamp);
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+    ? timestamp
+    : Number.NaN;
 }
 
 export function parseRuntime(value) {
@@ -47,8 +55,8 @@ export function parseRuntime(value) {
   if (!raw) return Number.NaN;
 
   // Plain numeric values are treated as minutes because the source data is expected to store runtimes in minutes.
-  const hm = raw.match(/(\d+)\s*(h|hr|hrs|hour|hours)\s*(\d+)?\s*(m|min|mins|minute|minutes)?/i);
-  if (hm) return Number(hm[1]) * 60 + Number(hm[3] || 0);
+  const hm = raw.match(/^(\d+)\s*(?:hours?|hrs?|h)\s*(\d+)?\s*(?:minutes?|mins?|m)?$/i);
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2] || 0);
 
   const colon = raw.match(/^(\d+)\s*:\s*(\d{1,2})$/);
   if (colon) return Number(colon[1]) * 60 + Number(colon[2]);

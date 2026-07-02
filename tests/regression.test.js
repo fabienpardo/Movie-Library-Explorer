@@ -366,6 +366,10 @@ test("parseRuntime and parseDateValue cover every supported input shape", async 
 
   assert.equal(h.parseRuntime("118"), 118);
   assert.equal(h.parseRuntime("1h30"), 90);
+  assert.equal(h.parseRuntime("1hr30"), 90);
+  assert.equal(h.parseRuntime("1 hr 30 min"), 90);
+  assert.equal(h.parseRuntime("1 hour 30 minutes"), 90);
+  assert.equal(h.parseRuntime("2 hours 5 minutes"), 125);
   assert.equal(h.parseRuntime("2h"), 120);
   assert.equal(h.parseRuntime("2:05"), 125);
   assert.equal(h.parseRuntime("95 min"), 95);
@@ -375,6 +379,9 @@ test("parseRuntime and parseDateValue cover every supported input shape", async 
   assert.equal(h.parseDateValue("2020-03-15"), Date.UTC(2020, 2, 15));
   assert.equal(h.parseDateValue("15/03/2020"), Date.UTC(2020, 2, 15));
   assert.equal(h.parseDateValue("15.03.2020"), Date.UTC(2020, 2, 15));
+  assert.ok(Number.isNaN(h.parseDateValue("2020-02-31")));
+  assert.ok(Number.isNaN(h.parseDateValue("31/02/2020")));
+  assert.ok(Number.isNaN(h.parseDateValue("2020-13-01")));
   assert.ok(Number.isNaN(h.parseDateValue("")));
   assert.ok(Number.isNaN(h.parseDateValue("not a date")));
 });

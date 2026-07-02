@@ -275,9 +275,8 @@ function createCardFilterButtonNode(category, value, baseClass, selectedClass) {
   button.setAttribute("aria-pressed", String(selected));
   return button;
 }
-function createCreditGroupNode(label, values, selected) {
+function createCreditGroupNode(label, values, category) {
   if (!values.length) return null;
-  const category = selected === state.selected.director ? "director" : "actor";
   const valueNodes = [];
   values.forEach((value, index) => {
     const children = [createCardFilterButtonNode(category, value, "credit-token", "selected-credit")];
@@ -292,8 +291,8 @@ function createCreditGroupNode(label, values, selected) {
 }
 function createCardCreditsNode(model) {
   const nodes = [
-    createCreditGroupNode("Réalisation", model.directors, state.selected.director),
-    createCreditGroupNode("Acteurs", model.actors, state.selected.actor)
+    createCreditGroupNode("Réalisation", model.directors, "director"),
+    createCreditGroupNode("Acteurs", model.actors, "actor")
   ].filter(Boolean);
   return nodes.length ? createElement("div", { className: "card-credits credits" }, nodes) : null;
 }

@@ -296,11 +296,35 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   await waitForExpression(page, `!document.querySelector('#selectionPanel').hidden`, 'selection panel open');
   const openSnapshot = await evaluateFunction(page, () => ({
     panelText: document.querySelector('#selectionPanel').textContent,
+    role: document.querySelector('#selectionPanel').getAttribute('role'),
+    modal: document.querySelector('#selectionPanel').getAttribute('aria-modal'),
+    ariaHidden: document.querySelector('#selectionPanel').getAttribute('aria-hidden'),
+    inert: document.querySelector('#selectionPanel').hasAttribute('inert'),
+    focusInside: document.querySelector('#selectionPanel').contains(document.activeElement),
     storedSelection: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]').length,
     selectedButtons: document.querySelectorAll('.selection-toggle.is-selected').length
   }));
   assert.match(openSnapshot.panelText, /Sélection temporaire/);
+  assert.equal(openSnapshot.role, 'dialog');
+  assert.equal(openSnapshot.modal, 'true');
+  assert.equal(openSnapshot.ariaHidden, 'false');
+  assert.equal(openSnapshot.inert, false);
+  assert.equal(openSnapshot.focusInside, true);
   assert.equal(openSnapshot.storedSelection, 1);
+
+  const focusTrapSnapshot = await evaluateFunction(page, () => {
+    const panel = document.querySelector('#selectionPanel');
+    const selector = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])";
+    const focusable = [...panel.querySelectorAll(selector)].filter(control => !control.closest('[hidden]') && control.getClientRects().length);
+    focusable[focusable.length - 1].focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    return {
+      wrappedToFirst: document.activeElement === focusable[0],
+      firstLabel: focusable[0].textContent.trim()
+    };
+  });
+  assert.equal(focusTrapSnapshot.wrappedToFirst, true);
+  assert.equal(focusTrapSnapshot.firstLabel, 'Vider');
 
   await click(page, 'button[data-selection-detail-id]');
   await waitForExpression(page, `document.querySelector('#selectionPanel .selection-detail .movie-card')`, 'selection detail card');

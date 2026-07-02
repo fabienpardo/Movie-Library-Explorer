@@ -31,6 +31,8 @@ const SHELL_ASSETS = [
   "./src/sorting.mjs",
   "./src/state.mjs",
   "./src/utils.mjs",
+  "./favicon.svg?v=8.8.9",
+  "./favicon-16.png?v=8.8.9",
   "./favicon-32.png?v=8.8.9",
   "./apple-touch-icon.png?v=8.8.9",
   "./icon-192.png?v=8.8.9",
