@@ -3,7 +3,7 @@
    index.html/style.css/script.js on every deploy, or clients can be served a
    stale shell from the cache. */
 const CACHE_PREFIX = "mlx-";
-const VERSION = "mlx-8.8.8";
+const VERSION = "mlx-8.8.9";
 const SHELL = VERSION + "-shell";
 const DATA = VERSION + "-data";
 // Poster images are immutable per URL, so they live in a version-independent cache
@@ -17,8 +17,8 @@ const SHELL_ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=8.8.8",
-  "./script.js?v=8.8.8",
+  "./style.css?v=8.8.9",
+  "./script.js?v=8.8.9",
   "./src/app.mjs",
   "./src/config.mjs",
   "./src/data.mjs",
@@ -31,11 +31,11 @@ const SHELL_ASSETS = [
   "./src/sorting.mjs",
   "./src/state.mjs",
   "./src/utils.mjs",
-  "./favicon-32.png?v=8.8.8",
-  "./apple-touch-icon.png?v=8.8.8",
-  "./icon-192.png?v=8.8.8",
-  "./icon-512.png?v=8.8.8",
-  "./icon-maskable-512.png?v=8.8.8"
+  "./favicon-32.png?v=8.8.9",
+  "./apple-touch-icon.png?v=8.8.9",
+  "./icon-192.png?v=8.8.9",
+  "./icon-512.png?v=8.8.9",
+  "./icon-maskable-512.png?v=8.8.9"
 ];
 
 self.addEventListener("install", event => {

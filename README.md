@@ -190,4 +190,4 @@ Current expected result:
 
 The app can be deployed as static files on GitHub Pages.
 
-When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.8`, and the static asset test validates that version alignment.
+When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.9`, and the static asset test validates that version alignment.

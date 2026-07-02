@@ -23,6 +23,28 @@ import {
 import { createElement, joinWithSeparator, replaceChildren, textNode } from "./dom.mjs";
 import { activeCount } from "./matching.mjs";
 
+const EAGER_POSTER_COUNT = 8;
+const HIGH_PRIORITY_POSTER_COUNT = 3;
+
+export function posterPriorityForIndex(index) {
+  const visibleIndex = Number.isFinite(index) ? index : Number.POSITIVE_INFINITY;
+  return {
+    loading: visibleIndex < EAGER_POSTER_COUNT ? "eager" : "lazy",
+    fetchpriority: visibleIndex < HIGH_PRIORITY_POSTER_COUNT ? "high" : "low"
+  };
+}
+
+function posterImageAttrs(src, alt, priority, extraAttrs = {}) {
+  return { src, alt, loading: priority.loading, decoding: "async", fetchpriority: priority.fetchpriority, ...extraAttrs };
+}
+
+function syncPosterPriority(node, priority) {
+  node.querySelectorAll(".movie-poster img, .card-banner__img").forEach(image => {
+    image.setAttribute("loading", priority.loading);
+    image.setAttribute("fetchpriority", priority.fetchpriority);
+  });
+}
+
 function filterToggleLabel(category, value) {
   const label = category === "saga" ? "saga" : categories[category].label.toLowerCase();
   const action = state.selected[category].has(value) ? "Retirer" : "Ajouter";
@@ -47,11 +69,11 @@ function stashCardNode(id, node) {
     cardNodeCache.delete(cardNodeCache.keys().next().value);
   }
 }
-function takeCardNode(id, row) {
+function takeCardNode(id, row, index) {
   const cached = cardNodeCache.get(id);
   if (!cached) return null;
   cardNodeCache.delete(id);
-  updateCardContent(cached, row);
+  updateCardContent(cached, row, index);
   return cached;
 }
 export function renderGrid(rows) {
@@ -75,17 +97,17 @@ export function renderGrid(rows) {
     }
   }
 
-  const ordered = rows.map(row => {
+  const ordered = rows.map((row, index) => {
     const id = movieId(row);
     const live = reusable.get(id);
     if (live) {
       reusable.delete(id);
-      updateCardContent(live, row);
+      updateCardContent(live, row, index);
       return live;
     }
-    const pooled = takeCardNode(id, row);
+    const pooled = takeCardNode(id, row, index);
     if (pooled) return pooled;
-    return createMovieCardNode(row);
+    return createMovieCardNode(row, { index });
   });
 
   // Cards no longer in the result set: keep their nodes (and painted posters) in
@@ -133,10 +155,11 @@ function syncCardSelectionButton(node) {
   const symbol = button.querySelector("span");
   if (symbol) symbol.textContent = selected ? "✓" : "+";
 }
-function updateCardContent(node, row) {
+function updateCardContent(node, row, index) {
   const model = movieViewModel(row);
   const body = node.querySelector(".movie-card__body");
   if (body) replaceChildren(body, createMovieCardBodyNodes(model));
+  syncPosterPriority(node, posterPriorityForIndex(index));
 
   const badge = node.querySelector('.franchise-badge[data-card-filter-category="saga"]');
   if (badge) syncCardButtonState(badge, (state.selected.saga || new Set()).has(model.saga));
@@ -169,7 +192,7 @@ function posterInitials(title) {
   const last = words.length > 1 ? words[words.length - 1][0] || "" : "";
   return (first + last).toUpperCase() || "?";
 }
-function createMoviePosterNode(model, modifierClass = "") {
+function createMoviePosterNode(model, modifierClass = "", priority = posterPriorityForIndex()) {
   if (!model.posterUrl) return null;
   const url = model.posterUrl;
   const initials = posterInitials(model.title);
@@ -179,7 +202,7 @@ function createMoviePosterNode(model, modifierClass = "") {
     figure.append(createElement("span", { text: initials, attrs: { "aria-hidden": "true" } }));
     return figure;
   }
-  figure.append(createElement("img", { attrs: { src: url, alt: `Affiche de ${model.title}`, loading: "lazy", decoding: "async" } }));
+  figure.append(createElement("img", { attrs: posterImageAttrs(url, `Affiche de ${model.title}`, priority) }));
   return figure;
 }
 function createMovieTitleNodes(model) {
@@ -277,11 +300,11 @@ function createCardCreditsNode(model) {
 function createGenreChipsNode(model) {
   return createElement("div", { className: "card-genres chips" }, model.genres.map(genre => createCardFilterButtonNode("genre", genre, "genre-chip", "genre-chip--selected")));
 }
-function createCardBannerNode(model) {
+function createCardBannerNode(model, priority) {
   const children = [];
   const url = model.posterUrl;
   if (url && !failedPosters.has(url)) {
-    children.push(createElement("img", { className: "card-banner__img", attrs: { src: url, alt: "", loading: "lazy", decoding: "async", "aria-hidden": "true" } }));
+    children.push(createElement("img", { className: "card-banner__img", attrs: posterImageAttrs(url, "", priority, { "aria-hidden": "true" }) }));
   }
   children.push(createElement("div", { className: "card-banner__scrim", attrs: { "aria-hidden": "true" } }));
   children.push(createFranchiseBadgeNode(model));
@@ -296,17 +319,18 @@ function createMovieCardBodyNodes(model) {
     createGenreChipsNode(model)
   ].filter(Boolean);
 }
-export function createMovieCardNode(row) {
+export function createMovieCardNode(row, options = {}) {
   const model = movieViewModel(row);
+  const priority = posterPriorityForIndex(options.index);
   const card = createElement("article", {
     className: ["movie-card", "movie-card--media", model.posterUrl ? "movie-card--with-poster" : ""],
     dataset: { movieId: model.id }
   });
   const thumb = model.posterUrl
-    ? createMoviePosterNode(model, "card-thumb")
+    ? createMoviePosterNode(model, "card-thumb", priority)
     : createElement("figure", { className: "movie-poster card-thumb card-thumb--empty", attrs: { "aria-hidden": "true" } });
   card.append(
-    createCardBannerNode(model),
+    createCardBannerNode(model, priority),
     createElement("div", { className: "card-seam" }, [
       thumb,
       createElement("div", { className: "card-title-block movie-card__title-block" }, createMovieTitleNodes(model))

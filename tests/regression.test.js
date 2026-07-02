@@ -156,6 +156,17 @@ test("poster URLs are sanitized for card rendering", async () => {
   assert.equal(h.safeImageUrl("javascript:alert(1)"), "");
 });
 
+test("first-screen poster images get eager loading and high fetch priority", async () => {
+  const h = await loadAppHooks();
+
+  assert.deepEqual(h.posterPriorityForIndex(0), { loading: "eager", fetchpriority: "high" });
+  assert.deepEqual(h.posterPriorityForIndex(2), { loading: "eager", fetchpriority: "high" });
+  assert.deepEqual(h.posterPriorityForIndex(3), { loading: "eager", fetchpriority: "low" });
+  assert.deepEqual(h.posterPriorityForIndex(7), { loading: "eager", fetchpriority: "low" });
+  assert.deepEqual(h.posterPriorityForIndex(8), { loading: "lazy", fetchpriority: "low" });
+  assert.deepEqual(h.posterPriorityForIndex(), { loading: "lazy", fetchpriority: "low" });
+});
+
 test("movie IDs prefer stable IMDb URLs before normalized fallback IDs", async () => {
   const h = await loadAppHooks();
   const labels = ["Title", "Original Title", "Year", "URL", "Position"];
