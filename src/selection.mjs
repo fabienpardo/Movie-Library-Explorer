@@ -1,3 +1,4 @@
+import { FOCUSABLE, PANEL_FOCUSABLE, SUPPORTS_INERT } from "./config.mjs";
 import { els, persistSelection, state } from "./state.mjs";
 import { formatRuntime, mainCountry, parseRuntime, pluralize, toSafeDomId } from "./utils.mjs";
 import { cell, displayTitle, movieId } from "./data.mjs";
@@ -58,8 +59,46 @@ export function toggleSelectionDetail(id) {
   if (selector) els.selectionPanel?.querySelector(selector)?.focus();
 }
 function syncSelectionA11y() {
-  els.selectionPanel.setAttribute("aria-hidden", String(!state.selectionPanelOpen));
-  els.selectionPanel.toggleAttribute("inert", !state.selectionPanelOpen);
+  const open = state.selectionPanelOpen;
+  els.selectionPanel.setAttribute("aria-hidden", String(!open));
+  els.selectionPanel.toggleAttribute("inert", !open);
+  syncSelectionFocusableFallback(!open);
+  if (open) {
+    els.selectionPanel.setAttribute("role", "dialog");
+    els.selectionPanel.setAttribute("aria-modal", "true");
+  } else {
+    els.selectionPanel.removeAttribute("role");
+    els.selectionPanel.removeAttribute("aria-modal");
+  }
+}
+function syncSelectionFocusableFallback(disabled) {
+  if (SUPPORTS_INERT) return;
+  els.selectionPanel.querySelectorAll(PANEL_FOCUSABLE).forEach(control => {
+    if (disabled) {
+      if (!("previousTabIndex" in control.dataset)) control.dataset.previousTabIndex = control.getAttribute("tabindex") ?? "";
+      control.setAttribute("tabindex", "-1");
+      return;
+    }
+
+    if (!("previousTabIndex" in control.dataset)) return;
+    const previous = control.dataset.previousTabIndex;
+    if (previous) control.setAttribute("tabindex", previous);
+    else control.removeAttribute("tabindex");
+    delete control.dataset.previousTabIndex;
+  });
+}
+function focusableSelectionControls() {
+  return [...els.selectionPanel.querySelectorAll(FOCUSABLE)].filter(control => !control.closest("[hidden]") && control.getClientRects().length);
+}
+export function trapSelectionFocus(event) {
+  if (event.key !== "Tab" || !state.selectionPanelOpen) return;
+  const focusable = focusableSelectionControls();
+  const first = focusable[0] || els.selectionPanel;
+  const last = focusable[focusable.length - 1] || els.selectionPanel;
+
+  if (!els.selectionPanel.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+  else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 export function openSelectionPanel() {
   state.selectionPanelOpen = true;
@@ -152,4 +191,5 @@ export function renderSelectionPanel() {
     children.push(createElement("p", { className: "selection-empty", text: "Aucun film sélectionné." }));
   }
   replaceChildren(els.selectionPanel, children);
+  syncSelectionA11y();
 }

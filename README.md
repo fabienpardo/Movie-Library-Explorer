@@ -105,7 +105,7 @@ Coverage is optional and uses `c8` on demand:
 npm run test:coverage
 ```
 
-The browser E2E suite requires Chromium or Chrome. Set `CHROMIUM_PATH` if it is not in a standard location.
+The browser E2E suite requires Chromium or Chrome. Set `CHROMIUM_PATH` if it is not in a standard location. On Node 20.10+, the `npm run test:e2e` script relaunches the suite with the WebSocket flag that Chrome DevTools Protocol needs; earlier Node 20 releases keep the existing skip behavior because that flag is unavailable.
 
 ## Test fixtures
 
@@ -164,7 +164,7 @@ Static tests validate this section order so future CSS changes do not drift back
 
 ## Runtime entry point
 
-`script.js` is intentionally small. It dynamically imports `src/app.mjs`, installs test hooks, then initializes the app unless `window.MOVIE_EXPLORER_SKIP_AUTO_INIT` is set by tests.
+`script.js` is intentionally small. It dynamically imports `src/app.mjs`, then initializes the app unless `window.MOVIE_EXPLORER_SKIP_AUTO_INIT` is set by tests. The test suites import `src/test-hooks.mjs` themselves, so production does not expose internal test helpers.
 
 This keeps GitHub Pages deployment simple while allowing the app code to be organized into native browser ES modules without a bundler.
 
@@ -181,8 +181,8 @@ Common test-runner, app-fixture, and browser-lifecycle logic lives under `tests/
 Current expected result:
 
 ```text
-26/26 regression scenarios passed.
-11/11 static asset scenarios passed.
+27/27 regression scenarios passed.
+12/12 static asset scenarios passed.
 16/16 browser E2E scenarios passed.
 ```
 

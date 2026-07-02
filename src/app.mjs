@@ -41,6 +41,7 @@ import {
   closeSelectionPanel,
   renderSelectionPanel,
   syncSelectionCount,
+  trapSelectionFocus,
   toggleMovieSelectionById,
   toggleSelectionDetail,
   toggleSelectionPanel
@@ -345,6 +346,7 @@ function bindEvents() {
     if (event.key === "Escape" && state.filtersOpen) closeFilters();
     if (event.key === "Escape" && state.selectionPanelOpen) closeSelectionPanel();
     trapFilterFocus(event);
+    trapSelectionFocus(event);
   });
 
   if (DESKTOP_QUERY.addEventListener) DESKTOP_QUERY.addEventListener("change", handleFilterViewportChange);
