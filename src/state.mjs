@@ -1,4 +1,4 @@
-import { DEFAULT_MATCH_MODE, STORAGE_KEYS } from "./config.mjs";
+import { DEFAULT_MATCH_MODE, INITIAL_VISIBLE_MOVIES, STORAGE_KEYS } from "./config.mjs";
 
 let storageAvailabilityCache = null;
 
@@ -28,6 +28,7 @@ export const state = {
   selectionDetailId: "",
   activePanel: "genre",
   filtersOpen: false,
+  visibleMovieLimit: INITIAL_VISIBLE_MOVIES,
   lastFocus: null,
   lastSelectionFocus: null,
   backToTopVisible: null,

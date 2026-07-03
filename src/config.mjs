@@ -44,4 +44,6 @@ export const STORAGE_KEYS = {
   selection: "movieExplorer.selection"
 };
 export const CARD_CACHE_LIMIT = 800;
+export const INITIAL_VISIBLE_MOVIES = 40;
+export const LOAD_MORE_MOVIES = 40;
 export const OPTION_COUNTS_CACHE_LIMIT = 80;

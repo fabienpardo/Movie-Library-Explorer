@@ -701,6 +701,11 @@ h1 {
   gap: 13px;
 }
 
+.load-more-button {
+  width: min(100%, 320px);
+  margin: 18px auto 0;
+}
+
 .movie-card {
   min-width: 0;
   padding: 18px;

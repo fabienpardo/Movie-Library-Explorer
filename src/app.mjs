@@ -7,7 +7,9 @@ import {
   categories,
   categoryKeys,
   searchableCategories,
-  COLUMNS
+  COLUMNS,
+  INITIAL_VISIBLE_MOVIES,
+  LOAD_MORE_MOVIES
 } from "./config.mjs";
 import { cardNodeCache, els, loadPersistentState, state } from "./state.mjs";
 import { decodeFilterValue } from "./utils.mjs";
@@ -58,7 +60,7 @@ function cacheEls() {
     "status", "diagnostics", "resultSummary", "movieGrid", "activeFilters", "selectionPanel", "filterPanel", "filterBackdrop",
     "openFilters", "closeFilters", "applyFilters", "clearFilters", "reloadData", "filterCount",
     "searchInput", "sortSelect", "toggleSelectionPanel", "selectionCount",
-    "backToTop", "genreMatchMode", "actorMatchMode", "directorMatchMode",
+    "backToTop", "loadMore", "genreMatchMode", "actorMatchMode", "directorMatchMode",
     "sagaList", "sagaSelectedCount", "selectionBackdrop"
   ].forEach(id => { els[id] = byId(id); });
 
@@ -70,7 +72,7 @@ function cacheEls() {
 }
 
 function resetData() {
-  Object.assign(state, { rows: [], labels: [], columns: {}, warnings: [] });
+  Object.assign(state, { rows: [], labels: [], columns: {}, warnings: [], visibleMovieLimit: INITIAL_VISIBLE_MOVIES });
   clearOptionCountsCache();
   state.sagaTotalsCache = null;
 }
@@ -79,10 +81,14 @@ function resetFilters() {
     search: "",
     filterSearch: { actor: "", director: "" },
     matchMode: { ...DEFAULT_MATCH_MODE },
-    activePanel: "genre"
+    activePanel: "genre",
+    visibleMovieLimit: INITIAL_VISIBLE_MOVIES
   });
   for (const selected of Object.values(state.selected)) selected.clear();
   clearOptionCountsCache();
+}
+function resetVisibleMovies() {
+  state.visibleMovieLimit = INITIAL_VISIBLE_MOVIES;
 }
 export function resetAfterLoadFailure() {
   resetData();
@@ -94,6 +100,7 @@ export function resetAfterLoadFailure() {
   renderSelectionPanel();
   syncSelectionCount();
   els.diagnostics.hidden = true;
+  if (els.loadMore) els.loadMore.hidden = true;
 }
 
 export async function loadSheet() {
@@ -115,7 +122,8 @@ export async function loadSheet() {
       labels,
       rows: usableRows,
       columns: COLUMNS,
-      warnings: []
+      warnings: [],
+      visibleMovieLimit: INITIAL_VISIBLE_MOVIES
     });
     // showLoading() already emptied the grid and this clears the reuse pool, so
     // renderGrid rebuilds every card from the freshly loaded rows (no stale reuse).
@@ -138,6 +146,7 @@ function showLoading() {
   els.status.textContent = "Chargement de la bibliothèque…";
   els.resultSummary.hidden = true;
   els.diagnostics.hidden = true;
+  if (els.loadMore) els.loadMore.hidden = true;
   els.movieGrid.replaceChildren();
   categoryKeys.forEach(category => { els[categories[category].listId].textContent = "Chargement…"; });
 }
@@ -145,28 +154,40 @@ function showError(message) {
   els.status.hidden = false;
   replaceChildren(els.status, [createElement("span", { className: "error", text: message })]);
   els.resultSummary.hidden = true;
+  if (els.loadMore) els.loadMore.hidden = true;
   els.movieGrid.replaceChildren();
   categoryKeys.forEach(category => { els[categories[category].listId].textContent = "Aucune donnée chargée"; });
+}
+
+function renderLoadMore(visibleCount, totalCount) {
+  if (!els.loadMore) return;
+  const remaining = Math.max(0, totalCount - visibleCount);
+  els.loadMore.hidden = remaining === 0;
+  els.loadMore.disabled = remaining === 0;
+  els.loadMore.setAttribute("aria-label", remaining ? `Afficher ${Math.min(LOAD_MORE_MOVIES, remaining)} films de plus` : "Tous les films sont affichés");
 }
 
 function render() {
   // The option-counts cache is keyed on every input that affects it (search/matchMode/selected) and is
   // cleared on data/filter resets, so it can safely persist across renders instead of being wiped each time.
   const rows = sortRows(filteredRows());
+  const visibleRows = rows.slice(0, state.visibleMovieLimit);
 
   els.status.hidden = true;
-  renderResultSummary(rows);
+  renderResultSummary(visibleRows, rows.length);
   updateFilterResultCount(rows.length);
   renderActiveFilters();
   renderFilterLists();
   syncSelectionCount();
   renderSelectionPanel();
-  renderGrid(rows);
+  renderGrid(visibleRows);
+  renderLoadMore(visibleRows.length, rows.length);
   requestAnimationFrame(() => { updateBackToTopMetrics(); syncBackToTop(); });
 }
 
 function setFilterSelection(category, value, selected) {
   state.selected[category][selected ? "add" : "delete"](value);
+  resetVisibleMovies();
   render();
 }
 function toggleFilterSelection(category, value) {
@@ -201,6 +222,7 @@ function removeFilter(category, value) {
   } else {
     return;
   }
+  resetVisibleMovies();
   render();
 }
 
@@ -230,8 +252,8 @@ function syncHeaderHeight() {
 }
 
 function bindEvents() {
-  els.searchInput.addEventListener("input", event => { state.search = event.target.value; render(); });
-  els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; render(); });
+  els.searchInput.addEventListener("input", event => { state.search = event.target.value; resetVisibleMovies(); render(); });
+  els.sortSelect.addEventListener("change", event => { state.sort = event.target.value; resetVisibleMovies(); render(); });
   els.toggleSelectionPanel.addEventListener("click", toggleSelectionPanel);
   categoryKeys.forEach(category => {
     const group = byId(`${category}MatchMode`);
@@ -240,6 +262,7 @@ function bindEvents() {
       if (!option || !group.contains(option)) return;
       if (state.matchMode[category] === option.dataset.matchValue) return;
       state.matchMode[category] = option.dataset.matchValue;
+      resetVisibleMovies();
       syncMatchMode(category);
       render();
     });
@@ -291,6 +314,10 @@ function bindEvents() {
     toggleFilterSelection(button.dataset.cardFilterCategory, decodeFilterValue(button.dataset.cardFilterValue));
   });
 
+  els.loadMore.addEventListener("click", () => {
+    state.visibleMovieLimit += LOAD_MORE_MOVIES;
+    render();
+  });
   els.clearFilters.addEventListener("click", clearFilters);
   els.reloadData.addEventListener("click", loadSheet);
   els.openFilters.addEventListener("click", openFilters);

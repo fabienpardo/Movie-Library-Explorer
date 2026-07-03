@@ -58,6 +58,7 @@ function resetState(hooks, labels, rows, columns) {
     selectionDetailId: '',
     activePanel: 'genre',
     filtersOpen: false,
+    visibleMovieLimit: hooks.INITIAL_VISIBLE_MOVIES,
     lastFocus: null,
     backToTopVisible: null,
     optionCountsCache: new Map()
