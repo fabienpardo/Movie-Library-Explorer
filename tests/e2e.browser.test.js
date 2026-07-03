@@ -20,6 +20,7 @@ test('loads the fixture and renders the library without browser errors', async (
   const snapshot = await evaluateFunction(page, () => ({
     cards: document.querySelectorAll('.movie-card').length,
     totalRows: window.__MovieExplorerTestHooks.state.rows.length,
+    initialLimit: window.__MovieExplorerTestHooks.INITIAL_VISIBLE_MOVIES,
     statusHidden: document.querySelector('#status').hidden,
     summary: document.querySelector('#resultSummary').textContent.replace(/\s+/g, ' ').trim(),
     diagnosticsHidden: document.querySelector('#diagnostics').hidden,
@@ -33,12 +34,14 @@ test('loads the fixture and renders the library without browser errors', async (
     posterCount: document.querySelectorAll('.movie-card .movie-poster').length,
     hasMediaCard: Boolean(document.querySelector('.movie-card.movie-card--media')),
     hasCardWithPoster: Boolean(document.querySelector('.movie-card.movie-card--with-poster')),
-    hasFranchiseBadge: document.querySelectorAll('.franchise-badge').length
+    hasFranchiseBadge: document.querySelectorAll('.franchise-badge').length,
+    loadMoreHidden: document.querySelector('#loadMore').hidden,
+    loadMoreText: document.querySelector('#loadMore').textContent.trim()
   }));
 
-  assert.equal(snapshot.cards, snapshot.totalRows);
+  assert.equal(snapshot.cards, snapshot.initialLimit);
   assert.equal(snapshot.statusHidden, true);
-  assert.match(snapshot.summary, new RegExp(`${snapshot.totalRows}\\s*\\/\\s*${snapshot.totalRows} films affichés`));
+  assert.match(snapshot.summary, new RegExp(`${snapshot.initialLimit}\\s*\\/\\s*${snapshot.totalRows} films affichés`));
   assert.equal(snapshot.statCards, 0);
   assert.equal(snapshot.diagnosticsHidden, true);
   assert.ok(snapshot.firstCardTitle);
@@ -51,6 +54,36 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.equal(snapshot.hasCardWithPoster, true);
   assert.ok(snapshot.hasFranchiseBadge >= 1);
   assert.match(snapshot.firstPosterSrc, /^https:\/\//);
+  assert.equal(snapshot.loadMoreHidden, false);
+  assert.equal(snapshot.loadMoreText, 'Afficher plus');
+});
+
+test('load more appends another batch and result changes reset to the first batch', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  const initialLimit = await evaluate(page, `window.__MovieExplorerTestHooks.INITIAL_VISIBLE_MOVIES`);
+  const batchSize = await evaluate(page, `window.__MovieExplorerTestHooks.LOAD_MORE_MOVIES`);
+
+  await click(page, '#loadMore');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === ${initialLimit + batchSize}`, 'second result batch');
+  const afterLoadMore = await evaluateFunction(page, () => ({
+    cards: document.querySelectorAll('.movie-card').length,
+    summary: document.querySelector('#resultSummary').textContent.replace(/\s+/g, ' ').trim(),
+    visibleLimit: window.__MovieExplorerTestHooks.state.visibleMovieLimit
+  }));
+  assert.equal(afterLoadMore.cards, initialLimit + batchSize);
+  assert.equal(afterLoadMore.visibleLimit, initialLimit + batchSize);
+  assert.match(afterLoadMore.summary, new RegExp(`${initialLimit + batchSize}\\s*\\/\\s*\\d+ films affichés`));
+
+  await setSelectValue(page, '#sortSelect', 'title-asc');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === window.__MovieExplorerTestHooks.INITIAL_VISIBLE_MOVIES`, 'first batch after sort reset');
+  const afterSort = await evaluateFunction(page, () => ({
+    cards: document.querySelectorAll('.movie-card').length,
+    visibleLimit: window.__MovieExplorerTestHooks.state.visibleMovieLimit,
+    summary: document.querySelector('#resultSummary').textContent.replace(/\s+/g, ' ').trim()
+  }));
+  assert.equal(afterSort.cards, initialLimit);
+  assert.equal(afterSort.visibleLimit, initialLimit);
+  assert.match(afterSort.summary, new RegExp(`${initialLimit}\\s*\\/\\s*\\d+ films affichés`));
 });
 
 test('search reduces displayed results and clear filters restores them', async ({ browserWsUrl }) => {
@@ -69,7 +102,7 @@ test('search reduces displayed results and clear filters restores them', async (
   assert.equal(searchSnapshot.allContainQuery, true);
 
   await click(page, '#clearFilters');
-  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === window.__MovieExplorerTestHooks.state.rows.length`, 'full result set after clearing');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === window.__MovieExplorerTestHooks.INITIAL_VISIBLE_MOVIES`, 'first batch after clearing');
   assert.equal(await evaluate(page, `document.querySelector('#activeFilters').textContent.trim()`), '');
 });
 
@@ -275,10 +308,11 @@ test('mobile renders card view automatically with no display-mode selector', asy
     listRows: document.querySelectorAll('.movie-card--list').length,
     cardRows: document.querySelectorAll('.movie-card').length,
     totalRows: window.__MovieExplorerTestHooks.state.rows.length,
+    initialLimit: window.__MovieExplorerTestHooks.INITIAL_VISIBLE_MOVIES,
     selectorExists: Boolean(document.querySelector('#viewModeSelect'))
   }));
   assert.equal(snapshot.listRows, 0);
-  assert.equal(snapshot.cardRows, snapshot.totalRows);
+  assert.equal(snapshot.cardRows, Math.min(snapshot.initialLimit, snapshot.totalRows));
   assert.equal(snapshot.selectorExists, false);
 });
 

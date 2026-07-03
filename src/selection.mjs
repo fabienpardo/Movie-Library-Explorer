@@ -47,7 +47,8 @@ function syncSelectionUI() {
     if (symbol) symbol.textContent = selected ? "✓" : "+";
   });
   syncSelectionCount();
-  renderResultSummary(filteredRows());
+  const rows = filteredRows();
+  renderResultSummary(rows.slice(0, state.visibleMovieLimit), rows.length);
   renderSelectionPanel();
 }
 export function toggleSelectionDetail(id) {
@@ -154,7 +155,8 @@ function createSelectionItemNodes(row) {
     })
   ]);
   if (!expanded) return [item];
-  return [item, createElement("div", { className: "selection-detail", attrs: { id: detailId } }, [createMovieCardNode(row)])];
+  // Expanded selection details are opened on demand, so treat their poster like visible first-screen media.
+  return [item, createElement("div", { className: "selection-detail", attrs: { id: detailId } }, [createMovieCardNode(row, { index: 0 })])];
 }
 export function renderSelectionPanel() {
   if (!els.selectionPanel) return;

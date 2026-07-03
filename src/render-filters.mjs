@@ -108,7 +108,7 @@ function renderFilterList(category) {
   replaceChildren(container, nodes);
 }
 
-export function renderResultSummary(rows) {
+export function renderResultSummary(rows, totalRows = rows.length) {
   if (!els.resultSummary) return;
   if (!state.rows.length) {
     els.resultSummary.hidden = true;
@@ -120,7 +120,7 @@ export function renderResultSummary(rows) {
   const selection = state.selection.size;
   els.resultSummary.hidden = false;
   replaceChildren(els.resultSummary, [
-    createElement("span", {}, [createElement("strong", { text: rows.length }), textNode(` / ${state.rows.length} films affichés`)]),
+    createElement("span", {}, [createElement("strong", { text: rows.length }), textNode(` / ${totalRows} films affichés`)]),
     createElement("span", { text: `Tri : ${sortLabel()}` }),
     createElement("span", { text: pluralize(filters, "filtre actif", "filtres actifs") }),
     createElement("span", { text: pluralize(selection, "film sélectionné", "films sélectionnés") })

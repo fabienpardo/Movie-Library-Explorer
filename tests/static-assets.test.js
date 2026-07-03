@@ -92,6 +92,11 @@ test('index preconnects to known poster CDNs for cold loads', () => {
   assert.match(indexHtml, /<link\s+rel="preconnect"\s+href="https:\/\/m\.media-amazon\.com"\s*\/>/);
 });
 
+test('selection detail cards promote poster loading when expanded', () => {
+  const selectionSource = readRootFile('src/selection.mjs');
+  assert.match(selectionSource, /createMovieCardNode\(row,\s*\{\s*index:\s*0\s*\}\)/);
+});
+
 test('removed UI features and fragile selectors do not leave obsolete code paths', () => {
   assertPatternSet(`${indexHtml}\n${styleCss}\n${appSource()}`, [
     [/\.summary-card|class=["'][^"']*summary-card/, 'summary cards should stay removed'],

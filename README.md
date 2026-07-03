@@ -8,6 +8,7 @@ The app is built for GitHub Pages: no backend, no bundler, and no runtime npm de
 
 - French UI.
 - Card grid on every viewport. There is no list view and no display-mode selector.
+- The grid renders an initial capped batch of cards, with an `Afficher plus` button for the next batch.
 - Sticky result summary showing displayed movies, active sort, active filters, and temporary selection count.
 - Filters by genre, actor, director, and saga.
 - Genre / actor / director filters support `Tous` and `Au moins un` matching.
@@ -190,4 +191,4 @@ Current expected result:
 
 The app can be deployed as static files on GitHub Pages.
 
-When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.9`, and the static asset test validates that version alignment.
+When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.11`, and the static asset test validates that version alignment.

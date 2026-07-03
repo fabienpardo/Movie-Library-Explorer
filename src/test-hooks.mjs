@@ -1,7 +1,7 @@
 // Single home for the test surface. Importing the hook functions here (instead of in app.mjs)
 // keeps the app module free of imports-that-exist-only-for-tests. Dependency is one-directional
 // (test-hooks -> app + modules), so there is no import cycle.
-import { categories, COLUMNS } from "./config.mjs";
+import { categories, COLUMNS, INITIAL_VISIBLE_MOVIES, LOAD_MORE_MOVIES } from "./config.mjs";
 import { loadPersistentState, resetStorageAvailabilityForTests, state } from "./state.mjs";
 import {
   escapeHtml,
@@ -84,6 +84,8 @@ export function getTestHooks() {
     equivalentTitle,
     escapeHtml,
     loadPersistentState,
+    INITIAL_VISIBLE_MOVIES,
+    LOAD_MORE_MOVIES,
     makeMovieId,
     fallbackMovieId,
     legacyMovieIds,
