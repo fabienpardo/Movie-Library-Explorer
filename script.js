@@ -8,7 +8,27 @@ import("./src/app.mjs").then(({ initApp }) => {
   if (!window.MOVIE_EXPLORER_SKIP_AUTO_INIT) initApp();
 }).catch(error => {
   console.error("Movie Explorer failed to start", error);
+  showFatalStartupError();
 });
+
+// If the module graph fails to load (a bad deploy, offline first visit with no cached
+// shell, a blocked request), the app never boots and the initial "Chargement…" text
+// would otherwise sit forever. Replace it with an actionable failure + retry.
+function showFatalStartupError() {
+  if (typeof document === "undefined") return;
+  const status = document.getElementById("status");
+  if (!status) return;
+  status.hidden = false;
+  const message = document.createElement("span");
+  message.className = "error";
+  message.textContent = "Le chargement de l’application a échoué. Vérifiez votre connexion, puis réessayez.";
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "secondary-button";
+  retry.textContent = "Réessayer";
+  retry.addEventListener("click", () => window.location.reload());
+  status.replaceChildren(message, document.createElement("br"), retry);
+}
 
 // Register the service worker for offline support (PWA app shell + CSV caching).
 if ("serviceWorker" in navigator) {

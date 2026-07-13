@@ -89,6 +89,23 @@ export function makeMovieId(row, index = 0, columns = state.columns) {
   const url = normalizedMovieUrlId(row, columns);
   return url ? `url:${url}` : fallbackMovieId(row, index, columns);
 }
+// Assign a unique __movieExplorerId to every row during ingestion. Two rows can
+// otherwise resolve to the same id (a shared IMDb URL, or colliding title/year/
+// position), which would make the keyed renderer merge them into one card and let
+// selection treat them as a single film. Collisions get a deterministic "#n" suffix
+// and a diagnostic warning; the returned warnings surface in the diagnostics panel.
+export function assignUniqueMovieIds(rows, columns = state.columns) {
+  const seen = new Map();
+  const warnings = [];
+  rows.forEach((row, index) => {
+    const baseId = makeMovieId(row, index, columns);
+    const count = (seen.get(baseId) || 0) + 1;
+    seen.set(baseId, count);
+    row.__movieExplorerId = count === 1 ? baseId : `${baseId}#${count}`;
+    if (count > 1) warnings.push(`Identifiant de film en double détecté (ligne ${index + 2}) : ${baseId}. Un suffixe a été ajouté pour les distinguer.`);
+  });
+  return warnings;
+}
 export function reconcilePersistedSelection(rows = state.rows, columns = state.columns) {
   if (!state.selection.size) return;
 
@@ -103,7 +120,9 @@ export function reconcilePersistedSelection(rows = state.rows, columns = state.c
   const aliases = new Map();
   const validIds = new Set();
   rows.forEach((row, index) => {
-    const nextId = makeMovieId(row, index, columns);
+    // Use the id actually assigned during ingestion (incl. any duplicate-disambiguation
+    // suffix) so reconciliation matches what the renderer and selection use.
+    const nextId = movieId(row);
     validIds.add(nextId);
     legacyMovieIds(row, index, columns).forEach(oldId => aliases.set(oldId, nextId));
   });

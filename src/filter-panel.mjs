@@ -40,12 +40,20 @@ export function closeFilters() {
 export function isFilterPanelVisible() {
   return DESKTOP_QUERY.matches || state.filtersOpen;
 }
+// Regions outside the filter dialog that must be inert while it is open as a mobile
+// modal, so the background (notably the header search field) can neither take
+// pointer/keyboard focus nor appear in the accessibility tree. These regions are
+// never inerted by other logic, so toggling them from the modal state is safe.
+function filterBackgroundRegions() {
+  return [document.querySelector(".app-header"), document.querySelector(".content-panel"), els.backToTop];
+}
 export function syncFilterA11y() {
   const desktop = DESKTOP_QUERY.matches;
   const visible = isFilterPanelVisible();
   const modal = !desktop && state.filtersOpen;
   els.filterPanel.setAttribute("aria-hidden", String(!visible));
   els.filterPanel.toggleAttribute("inert", !visible);
+  filterBackgroundRegions().forEach(region => region?.toggleAttribute("inert", modal));
   syncFocusableFallback(!visible);
   if (modal) {
     els.filterPanel.setAttribute("role", "dialog");
@@ -88,11 +96,16 @@ export function trapFilterFocus(event) {
   else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
+// Honour the user's reduced-motion preference for JS-driven scrolls (smooth scrolling
+// can trigger motion sickness); CSS transitions are gated by the matching media query.
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 export function setFilterSearchFocus(isFocused) {
   els.filterPanel.classList.toggle("filter-panel--searching", isFocused);
   if (!isFocused) return;
   window.setTimeout(() => {
-    if (els.filterPanel.contains(document.activeElement)) document.activeElement.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (els.filterPanel.contains(document.activeElement)) document.activeElement.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, 80);
 }
 
@@ -111,5 +124,5 @@ export function syncBackToTop() {
   els.backToTop.classList.toggle("is-visible", visible);
 }
 export function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
 }

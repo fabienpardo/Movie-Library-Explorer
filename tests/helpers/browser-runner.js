@@ -34,6 +34,11 @@ function stopChromium(chromium) {
 async function setupBrowserTests(testName = 'browser E2E tests') {
   const skipReason = browserTestSkipReason();
   if (skipReason) {
+    // A silent skip in CI would let a missing/broken browser masquerade as a pass.
+    // Fail hard there unless an operator explicitly opts into skipping.
+    if (process.env.CI && process.env.ALLOW_BROWSER_TEST_SKIP !== '1') {
+      throw new Error(`Browser E2E tests cannot run in CI: ${skipReason} Set ALLOW_BROWSER_TEST_SKIP=1 to skip intentionally.`);
+    }
     console.log(`⚠ Skipping browser E2E tests: ${skipReason}`);
     return { skipped: true };
   }
@@ -81,4 +86,4 @@ async function runOneBrowserTest(testCase) {
   }
 }
 
-module.exports = { runBrowserTests, runOneBrowserTest };
+module.exports = { runBrowserTests, runOneBrowserTest, setupBrowserTests, teardownBrowserTests, assertNoBrowserDiagnostics };

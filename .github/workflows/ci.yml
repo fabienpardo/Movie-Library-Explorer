@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Deterministic install from the committed lockfile (no runtime package downloads).
+      - run: npm ci
+
+      - run: npm run lint
+
+      # Unit / static / graph / runner + the browser E2E suite. ubuntu-latest ships
+      # Google Chrome at /usr/bin/google-chrome, which the harness auto-detects; a
+      # missing browser fails CI (ALLOW_BROWSER_TEST_SKIP=1 would opt out).
+      - run: npm test
+        env:
+          CI: "true"
+
+      - run: npm run test:coverage
