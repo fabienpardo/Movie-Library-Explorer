@@ -299,6 +299,31 @@ async function createPage(browserWsUrl, options = {}) {
   return { page, diagnostics };
 }
 
+// A bare CDP page for the localhost smoke test: unlike createPage it does NOT block
+// HTTP or rewrite modules into blobs, so the page loads the real index.html, the real
+// script.js entry point, real static module URLs and the real service worker over
+// http://127.0.0.1. `blockedUrls` lets the caller drop external poster CDNs so the
+// page load stays deterministic and offline-safe.
+async function createRawPage(browserWsUrl, { blockedUrls = [] } = {}) {
+  const browserUrl = new URL(browserWsUrl);
+  const httpOrigin = `http://${browserUrl.host}`;
+  const target = await requestJson(`${httpOrigin}/json/new?${encodeURIComponent('about:blank')}`, { method: 'PUT' });
+  const page = new CDPClient(target.webSocketDebuggerUrl);
+  const diagnostics = { consoleErrors: [], exceptions: [] };
+  openPages.push({ page, diagnostics });
+
+  page.on('Runtime.consoleAPICalled', params => {
+    if (params.type === 'error') diagnostics.consoleErrors.push(params.args?.map(arg => arg.value || arg.description).join(' '));
+  });
+  page.on('Runtime.exceptionThrown', params => diagnostics.exceptions.push(params.exceptionDetails?.text || 'Runtime exception'));
+
+  await page.send('Page.enable');
+  await page.send('Runtime.enable');
+  await page.send('Network.enable');
+  if (blockedUrls.length) await page.send('Network.setBlockedURLs', { urls: blockedUrls });
+  return { page, diagnostics };
+}
+
 async function evaluate(page, expression) {
   const result = await page.send('Runtime.evaluate', {
     expression,
@@ -398,6 +423,7 @@ module.exports = {
   flushPages,
   startChromium,
   createPage,
+  createRawPage,
   evaluate,
   evaluateFunction,
   waitForExpression,

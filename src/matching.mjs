@@ -26,7 +26,13 @@ function rowSearchText(row) {
   }
   return row.__searchText;
 }
-function matchesSearch(row) { return !state.search || rowSearchText(row).includes(normalize(state.search)); }
+function matchesSearch(row) {
+  const query = normalize(state.search);
+  // No searchable tokens in the query. Whitespace-only input is "no filter" (match all),
+  // but punctuation/emoji-only input (e.g. "!!!") is a real query with nothing to match.
+  if (!query) return !String(state.search || "").trim();
+  return rowSearchText(row).includes(query);
+}
 function matchesSaga(row) {
   // Single-valued filter set by clicking a franchise badge; a movie matches when its saga is one of the selected ones.
   const selected = state.selected.saga;

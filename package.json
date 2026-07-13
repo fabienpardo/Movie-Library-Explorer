@@ -2,17 +2,23 @@
   "name": "movie-library-explorer",
   "version": "8.8.11",
   "scripts": {
-    "test": "npm run test:runner && npm run test:graph && npm run test:unit && npm run test:assets && npm run test:e2e",
+    "test": "npm run test:runner && npm run test:graph && npm run test:unit && npm run test:assets && npm run test:sw && npm run test:e2e && npm run test:smoke",
     "test:runner": "node tests/test-runner.test.js",
     "test:graph": "node tests/module-graph.test.js",
     "test:unit": "node tests/regression.test.js",
     "test:assets": "node tests/static-assets.test.js",
+    "test:sw": "node tests/sw.test.js",
     "test:e2e": "node tests/helpers/run-e2e.js",
-    "test:coverage": "npx --yes c8 --include=src/*.mjs --include=script.js --reporter=text --reporter=html node tests/regression.test.js",
-    "lint": "npx --yes eslint src tests script.js",
+    "test:smoke": "node tests/helpers/run-e2e.js tests/smoke.browser.test.js",
+    "test:coverage": "c8 --include=src/*.mjs --include=script.js --check-coverage --lines 40 --statements 40 --functions 30 --branches 75 --reporter=text --reporter=html node tests/regression.test.js",
+    "lint": "eslint src tests script.js",
     "bump": "node scripts/bump-version.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "c8": "^10.1.3",
+    "eslint": "^9.39.5"
   }
 }

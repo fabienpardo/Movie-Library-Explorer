@@ -283,6 +283,78 @@ test("search is scoped to fixed metadata fields and ignores other columns", asyn
   assert.ok(h.SEARCH_FIELDS.includes("title"));
 });
 
+test("non-Latin queries match and punctuation/emoji-only queries never match everything", async () => {
+  const h = await loadAppHooks();
+  const labels = ["Title", "URL"];
+  const columns = h.COLUMNS;
+  const rows = [
+    { Title: "東京物語", URL: "https://www.imdb.com/title/tt1/" },
+    { Title: "기생충", URL: "https://www.imdb.com/title/tt2/" },
+    { Title: "The Matrix", URL: "https://www.imdb.com/title/tt3/" }
+  ];
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+
+  // Non-Latin scripts survive normalization and match their own row only.
+  h.state.search = "東京";
+  assert.deepEqual(h.filteredRows().map(row => row.Title), ["東京物語"]);
+  h.state.search = "기생충";
+  assert.deepEqual(h.filteredRows().map(row => row.Title), ["기생충"]);
+
+  // Non-empty queries whose normalized form is empty must not become match-all.
+  for (const query of ["!!!", "😀", "…", "  ---  "]) {
+    h.state.search = query;
+    assert.equal(h.filteredRows().length, 0, `punctuation/emoji query ${JSON.stringify(query)} should match nothing`);
+  }
+
+  // Whitespace-only input is treated as no filter (match all).
+  h.state.search = "   ";
+  assert.equal(h.filteredRows().length, preparedRows.length);
+});
+
+test("parseList de-duplicates repeated cell values so counts and chips are not doubled", async () => {
+  const h = await loadAppHooks();
+  assert.deepEqual(h.parseList("Drame, Drame, Comédie"), ["Drame", "Comédie"]);
+  assert.deepEqual(h.parseList("A, A | A ; A"), ["A"]);
+  // Order is first-occurrence-preserving and blanks are dropped.
+  assert.deepEqual(h.parseList("B, ,A, B"), ["B", "A"]);
+
+  // A duplicated genre must count once, not twice, in the filter option counts.
+  const labels = ["Title", "Genres"];
+  const columns = h.COLUMNS;
+  const rows = [{ Title: "Solo", Genres: "Drame, Drame" }];
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+  const drame = h.optionCounts("genre").find(([value]) => value === "Drame");
+  assert.deepEqual(drame, ["Drame", 1]);
+});
+
+test("assignUniqueMovieIds disambiguates colliding ids and reconciliation follows the assigned id", async () => {
+  const h = await loadAppHooks();
+  const columns = h.COLUMNS;
+  // Two rows sharing an IMDb URL would otherwise resolve to the same id.
+  const rows = [
+    { Title: "Doublon A", URL: "https://www.imdb.com/title/tt9/", Position: "1" },
+    { Title: "Doublon B", URL: "https://www.imdb.com/title/tt9/", Position: "2" },
+    { Title: "Unique", URL: "https://www.imdb.com/title/tt10/", Position: "3" }
+  ];
+  const warnings = h.assignUniqueMovieIds(rows, columns);
+
+  assert.equal(rows[0].__movieExplorerId, "url:https://www.imdb.com/title/tt9/");
+  assert.equal(rows[1].__movieExplorerId, "url:https://www.imdb.com/title/tt9/#2");
+  assert.equal(rows[2].__movieExplorerId, "url:https://www.imdb.com/title/tt10/");
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /double/i);
+  // All three ids are distinct so the keyed renderer/selection can't merge rows.
+  assert.equal(new Set(rows.map(row => row.__movieExplorerId)).size, 3);
+
+  // A persisted selection of the disambiguated row survives reconciliation.
+  resetState(h, ["Title", "URL", "Position"], rows, columns);
+  h.state.selection = new Set(["url:https://www.imdb.com/title/tt9/#2"]);
+  h.reconcilePersistedSelection(rows, columns);
+  assert.ok(h.state.selection.has("url:https://www.imdb.com/title/tt9/#2"));
+});
+
 test("legacy persisted movie IDs are reconciled to the explicit v8.4.2 ID format", async () => {
   const h = await loadAppHooks();
   const labels = ["Title", "Year", "URL", "Position"];

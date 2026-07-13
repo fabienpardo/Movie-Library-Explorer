@@ -5,7 +5,10 @@
 const CACHE_PREFIX = "mlx-";
 const VERSION = "mlx-8.8.11";
 const SHELL = VERSION + "-shell";
-const DATA = VERSION + "-data";
+// The CSV cache is intentionally version-independent (like POSTERS): the last
+// known-good dataset must survive an app upgrade so a freshly updated client is
+// still offline-capable if Google Sheets is unreachable during the reload.
+const DATA = CACHE_PREFIX + "data";
 // Poster images are immutable per URL, so they live in a version-independent cache
 // that survives app deploys (no point re-downloading them on every version bump).
 const POSTERS = CACHE_PREFIX + "posters";
@@ -51,11 +54,20 @@ self.addEventListener("activate", event => {
     caches.keys()
       // Only purge this app's own old caches: CacheStorage is origin-wide, so a
       // bare "not current version" filter would wipe other apps on a shared origin.
-      // Keep POSTERS: it is intentionally version-independent.
-      .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== POSTERS && !key.startsWith(VERSION)).map(key => caches.delete(key))))
+      // Keep POSTERS and DATA: both are intentionally version-independent.
+      .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== POSTERS && key !== DATA && !key.startsWith(VERSION)).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
+
+// A response is only a valid CSV replacement when it is 2xx and not an HTML page.
+// Google can answer a published-sheet request with a status-200 login, quota, or
+// error page (content-type text/html); caching that would poison offline recovery.
+function looksLikeCsv(response) {
+  if (!response || !response.ok) return false;
+  const type = (response.headers.get("content-type") || "").toLowerCase();
+  return !type.includes("html");
+}
 
 // FIFO-trim a cache down to `limit` entries. Cache.keys() preserves insertion
 // order, so the oldest-stored posters are evicted first.
@@ -72,15 +84,19 @@ self.addEventListener("fetch", event => {
   // Cross-origin poster images (URLs come straight from the sheet) -> cache-first,
   // refresh in the background, capped so the store can't grow without bound. This is
   // the only persistence posters get: same-origin/SW logic below never sees them.
-  if (url.origin !== self.location.origin && request.destination === "image") {
+  if (url.origin !== self.location.origin && (url.protocol === "https:" || url.protocol === "http:") && request.destination === "image") {
     event.respondWith(
       caches.open(POSTERS).then(async cache => {
         const cached = await cache.match(request);
         const fetchAndCache = fetch(request).then(async response => {
           // Opaque (no-CORS) responses report ok=false but are still valid images.
           if (response && (response.ok || response.type === "opaque")) {
-            await cache.put(request, response.clone());
-            await trimCache(cache, POSTER_CACHE_LIMIT);
+            // Fail open: a cache.put quota rejection (or trim failure) must never turn
+            // a valid poster response into a broken image.
+            try {
+              await cache.put(request, response.clone());
+              await trimCache(cache, POSTER_CACHE_LIMIT);
+            } catch {}
           }
           return response;
         });
@@ -106,8 +122,16 @@ self.addEventListener("fetch", event => {
         caches.open(DATA).then(async cache => {
           try {
             const response = await fetch(request);
-            if (response && response.ok) cache.put(request, response.clone());
-            return response;
+            if (looksLikeCsv(response)) {
+              // Await the write (tied to the event via respondWith) so the SW isn't
+              // killed before the new CSV is persisted.
+              await cache.put(request, response.clone()).catch(() => {});
+              return response;
+            }
+            // A non-2xx (429/5xx) or HTML error page is not a usable replacement:
+            // hand back the last good CSV if we have one, else surface the response.
+            const cached = await cache.match(request);
+            return cached || response;
           } catch (error) {
             const cached = await cache.match(request);
             if (cached) return cached;
@@ -123,10 +147,15 @@ self.addEventListener("fetch", event => {
     event.respondWith(
       caches.open(DATA).then(async cache => {
         const cached = await cache.match(request);
-        const network = fetch(request).then(response => {
-          if (response && response.ok) cache.put(request, response.clone());
+        const network = fetch(request).then(async response => {
+          // Only replace the cache with a valid CSV; a non-2xx or HTML page must
+          // not overwrite the last good dataset.
+          if (!looksLikeCsv(response)) return cached || response;
+          await cache.put(request, response.clone()).catch(() => {});
           return response;
         }).catch(() => cached);
+        // Keep the revalidation + write alive even when we serve the cached copy.
+        event.waitUntil(network.catch(() => {}));
         return cached || network;
       })
     );

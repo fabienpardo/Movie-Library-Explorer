@@ -133,7 +133,7 @@ export function renderActiveFilters() {
     createElement("button", {
       className: "filter-remove",
       text: "×",
-      attrs: { type: "button", "aria-label": `Retirer le filtre ${item.group}` },
+      attrs: { type: "button", "aria-label": `Retirer le filtre ${item.group} : ${item.value}` },
       dataset: { filterCategory: item.category, filterValue: encodeFilterValue(item.value) }
     })
   ])));

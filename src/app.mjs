@@ -9,11 +9,12 @@ import {
   searchableCategories,
   COLUMNS,
   INITIAL_VISIBLE_MOVIES,
-  LOAD_MORE_MOVIES
+  LOAD_MORE_MOVIES,
+  LOAD_TIMEOUT_MS
 } from "./config.mjs";
 import { cardNodeCache, els, loadPersistentState, state } from "./state.mjs";
 import { decodeFilterValue } from "./utils.mjs";
-import { csvToTable, makeMovieId, reconcilePersistedSelection } from "./data.mjs";
+import { assignUniqueMovieIds, csvToTable, reconcilePersistedSelection } from "./data.mjs";
 import { sortRows } from "./sorting.mjs";
 import { byId, createElement, replaceChildren } from "./dom.mjs";
 import { clearOptionCountsCache, filteredRows } from "./matching.mjs";
@@ -41,6 +42,7 @@ import {
 import {
   clearSelection,
   closeSelectionPanel,
+  removeSelectionItem,
   renderSelectionPanel,
   syncSelectionCount,
   trapSelectionFocus,
@@ -48,6 +50,51 @@ import {
   toggleSelectionDetail,
   toggleSelectionPanel
 } from "./selection.mjs";
+
+// A rebuild-on-render (filter checkbox, card filter button, active-filter chip) can
+// leave focus stranded on <body>. Capture a stable descriptor of the focused control
+// before rendering and restore it — or the next logical control — afterward.
+function cssEscape(value) {
+  return typeof CSS !== "undefined" && CSS.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&");
+}
+function captureFocusKey() {
+  const el = document.activeElement;
+  if (!el || el === document.body || typeof el.closest !== "function") return null;
+
+  const cardFilter = el.closest("button[data-card-filter-category]");
+  if (cardFilter) {
+    const card = cardFilter.closest("[data-movie-id]");
+    return { kind: "card-filter", movieId: card?.dataset.movieId, category: cardFilter.dataset.cardFilterCategory, value: cardFilter.dataset.cardFilterValue };
+  }
+  if (el.matches("input[type='checkbox']")) {
+    const list = el.closest("[id]");
+    return { kind: "filter-checkbox", listId: list?.id, value: el.value };
+  }
+  const activeChip = el.closest("button[data-filter-category]");
+  if (activeChip) {
+    const chips = [...els.activeFilters.querySelectorAll("button[data-filter-category]")];
+    return { kind: "active-filter", index: chips.indexOf(activeChip) };
+  }
+  return null;
+}
+function restoreFocusKey(key) {
+  if (!key) return;
+  let target = null;
+  if (key.kind === "card-filter" && key.movieId) {
+    target = els.movieGrid.querySelector(`[data-movie-id="${cssEscape(key.movieId)}"] button[data-card-filter-category="${key.category}"][data-card-filter-value="${cssEscape(key.value)}"]`);
+  } else if (key.kind === "filter-checkbox" && key.listId) {
+    target = document.getElementById(key.listId)?.querySelector(`input[type='checkbox'][value="${cssEscape(key.value)}"]`);
+  } else if (key.kind === "active-filter") {
+    const chips = [...els.activeFilters.querySelectorAll("button[data-filter-category]")];
+    target = chips[key.index] || chips[key.index - 1] || els.clearFilters;
+  }
+  target?.focus?.();
+}
+function renderPreservingFocus() {
+  const key = captureFocusKey();
+  render();
+  restoreFocusKey(key);
+}
 
 export function dataSourceUrl() {
   const fixtureMode = window.MOVIE_EXPLORER_TEST_FIXTURE_MODE || new URLSearchParams(window.location.search).get("fixture");
@@ -103,26 +150,43 @@ export function resetAfterLoadFailure() {
   if (els.loadMore) els.loadMore.hidden = true;
 }
 
+// Guard against overlapping reloads: rapid "Recharger" clicks (or a viewport change
+// that triggers a reload mid-flight) each start their own fetch, and every completion
+// mutates shared global state. We abort the in-flight request when a newer one starts
+// and stamp each attempt with a monotonic generation, so only the latest request is
+// ever allowed to commit success OR failure to the UI.
+let activeLoadController = null;
+let loadGeneration = 0;
+
 export async function loadSheet() {
   showLoading();
   const sourceUrl = dataSourceUrl();
+  const generation = ++loadGeneration;
+  if (activeLoadController) activeLoadController.abort();
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  activeLoadController = controller;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), LOAD_TIMEOUT_MS) : null;
+  const isStale = () => generation !== loadGeneration;
 
   try {
-    const response = await fetch(sourceUrl, { cache: "no-store" });
+    const response = await fetch(sourceUrl, { cache: "no-store", signal: controller?.signal });
+    if (isStale()) return;
     if (!response.ok) throw new Error(`Impossible de charger le point d’accès CSV. HTTP ${response.status}.`);
 
     const text = await response.text();
+    if (isStale()) return;
     if (/<!doctype html|<html[\s>]/i.test(text)) throw new Error("Google a renvoyé du HTML au lieu du CSV. Vérifiez que l’onglet est toujours publié.");
 
     const { labels, rows } = csvToTable(text);
     const usableRows = rows
       .filter(row => Object.values(row).some(value => String(value || "").trim()))
-      .map((row, index) => ({ ...row, __movieExplorerId: makeMovieId(row, index, COLUMNS) }));
+      .map(row => ({ ...row }));
+    const idWarnings = assignUniqueMovieIds(usableRows, COLUMNS);
     Object.assign(state, {
       labels,
       rows: usableRows,
       columns: COLUMNS,
-      warnings: [],
+      warnings: idWarnings,
       visibleMovieLimit: INITIAL_VISIBLE_MOVIES
     });
     // showLoading() already emptied the grid and this clears the reuse pool, so
@@ -136,8 +200,15 @@ export async function loadSheet() {
     renderDiagnostics();
     render();
   } catch (error) {
+    if (isStale()) return;
     resetAfterLoadFailure();
-    showError(`${error.message}\n\nSource: ${sourceUrl || dataSourceUrl()}`);
+    const message = error.name === "AbortError"
+      ? "Le chargement des données a expiré. Vérifiez votre connexion, puis réessayez."
+      : `${error.message}\n\nSource: ${sourceUrl || dataSourceUrl()}`;
+    showError(message);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (activeLoadController === controller) activeLoadController = null;
   }
 }
 
@@ -188,7 +259,7 @@ function render() {
 function setFilterSelection(category, value, selected) {
   state.selected[category][selected ? "add" : "delete"](value);
   resetVisibleMovies();
-  render();
+  renderPreservingFocus();
 }
 function toggleFilterSelection(category, value) {
   if (!state.selected[category]) return;
@@ -211,6 +282,9 @@ function immediateFilterTap(category, option, event) {
 export function clearFilters() {
   resetFilters();
   syncControls();
+  // resetFilters sets state.activePanel back to "genre"; sync the DOM so a visible
+  // Actor/Saga panel doesn't stay shown while state reports Genre.
+  setActivePanel(state.activePanel);
   render();
 }
 function removeFilter(category, value) {
@@ -223,7 +297,7 @@ function removeFilter(category, value) {
     return;
   }
   resetVisibleMovies();
-  render();
+  renderPreservingFocus();
 }
 
 function handleFilterViewportChange() {
@@ -355,7 +429,7 @@ function bindEvents() {
 
     const removeButton = event.target.closest("button[data-selection-remove-id]");
     if (removeButton) {
-      toggleMovieSelectionById(removeButton.dataset.selectionRemoveId);
+      removeSelectionItem(removeButton.dataset.selectionRemoveId);
       return;
     }
 

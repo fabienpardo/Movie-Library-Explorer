@@ -46,7 +46,8 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.equal(snapshot.diagnosticsHidden, true);
   assert.ok(snapshot.firstCardTitle);
   assert.equal(snapshot.selectionButtonText, '+');
-  assert.equal(snapshot.selectionButtonLabel, 'Ajouter à la sélection');
+  // The selection button name includes the movie title so repeated buttons are distinguishable.
+  assert.equal(snapshot.selectionButtonLabel, `Ajouter à la sélection : ${snapshot.firstCardTitle}`);
   assert.equal(snapshot.selectionButtonPosition, 'absolute');
   assert.equal(snapshot.cardPosition, 'relative');
   assert.ok(snapshot.posterCount >= 1);
@@ -338,7 +339,7 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
     storedSelection: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]').length,
     selectedButtons: document.querySelectorAll('.selection-toggle.is-selected').length
   }));
-  assert.match(openSnapshot.panelText, /Sélection temporaire/);
+  assert.match(openSnapshot.panelText, /Ma sélection/);
   assert.equal(openSnapshot.role, 'dialog');
   assert.equal(openSnapshot.modal, 'true');
   assert.equal(openSnapshot.ariaHidden, 'false');

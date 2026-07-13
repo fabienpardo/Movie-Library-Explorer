@@ -11,6 +11,10 @@ const browserGlobals = {
   requestAnimationFrame: "readonly",
   fetch: "readonly",
   Event: "readonly",
+  AbortController: "readonly",
+  setTimeout: "readonly",
+  clearTimeout: "readonly",
+  navigator: "readonly",
   console: "readonly"
 };
 

@@ -2,7 +2,11 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
-const testFile = path.resolve(__dirname, '..', 'e2e.browser.test.js');
+// Defaults to the E2E suite; an explicit path (e.g. the localhost smoke test) can be
+// passed as the first CLI arg. Both need the same --experimental-websocket relaunch.
+const testFile = process.argv[2]
+  ? path.resolve(process.cwd(), process.argv[2])
+  : path.resolve(__dirname, '..', 'e2e.browser.test.js');
 
 function supportsExperimentalWebSocketFlag(version = process.versions.node) {
   const [major, minor] = version.split('.').map(Number);

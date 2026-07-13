@@ -13,10 +13,24 @@ export function toSafeDomId(value, prefix = "id") {
 }
 
 export function normalize(value) {
-  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // Keep every Unicode letter/number (not just ASCII) so non-Latin titles and
+  // queries \u2014 \u6771\u4eac, \uae30\uc0dd\ucda9 \u2014 survive; only strip diacritics and punctuation/symbols.
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
-export function parseList(value) { return String(value || "").split(/[,;|]/).map(item => item.trim()).filter(Boolean); }
+export function parseList(value) {
+  // De-duplicate within a cell so "Drama, Drama" is one token: otherwise a repeated
+  // value double-counts in filter option counts and renders twice as a card chip.
+  const seen = new Set();
+  const out = [];
+  for (const item of String(value || "").split(/[,;|]/)) {
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
 
 export function mainCountry(value) { return String(value || "").split(/[,;|/]/).map(item => item.trim()).filter(Boolean)[0] || ""; }
 

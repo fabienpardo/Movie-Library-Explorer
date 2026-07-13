@@ -4,7 +4,7 @@ import { formatRuntime, mainCountry, parseRuntime, pluralize, toSafeDomId } from
 import { cell, displayTitle, movieId } from "./data.mjs";
 import { createElement, replaceChildren } from "./dom.mjs";
 import { filteredRows } from "./matching.mjs";
-import { createMovieCardNode } from "./render-cards.mjs";
+import { createMovieCardNode, selectionToggleLabel } from "./render-cards.mjs";
 import { renderResultSummary } from "./render-filters.mjs";
 
 export function selectedRows() {
@@ -27,6 +27,19 @@ export function toggleMovieSelectionById(id) {
   persistSelection();
   syncSelectionUI();
 }
+// Removing an item from the still-open selection dialog rebuilds the list, which
+// drops focus onto <body>. Move it to the next item's remove button (or the previous
+// one, or a safe dialog control) so keyboard/screen-reader users keep their place.
+export function removeSelectionItem(id) {
+  if (!id) return;
+  const index = selectedRows().findIndex(row => movieId(row) === id);
+  toggleMovieSelectionById(id);
+  if (!state.selectionPanelOpen) return;
+  const removeButtons = [...els.selectionPanel.querySelectorAll("button[data-selection-remove-id]")];
+  const fallback = els.selectionPanel.querySelector("[data-selection-action='clear']:not([disabled]), [data-selection-action='close']");
+  const target = removeButtons[index] || removeButtons[index - 1] || fallback || els.selectionPanel;
+  target.focus?.();
+}
 export function clearSelection() {
   state.selection.clear();
   state.selectionDetailId = "";
@@ -38,7 +51,8 @@ export function clearSelection() {
 function syncSelectionUI() {
   document.querySelectorAll("button[data-selection-id]").forEach(button => {
     const selected = state.selection.has(button.dataset.selectionId);
-    const label = selected ? "Retirer de la sélection" : "Ajouter à la sélection";
+    const title = button.closest(".movie-card")?.querySelector("h2")?.textContent?.trim() || "";
+    const label = selectionToggleLabel(selected, title);
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-pressed", String(selected));
     button.setAttribute("aria-label", label);
@@ -59,10 +73,18 @@ export function toggleSelectionDetail(id) {
   const selector = typeof CSS !== "undefined" && CSS.escape ? `button[data-selection-detail-id="${CSS.escape(id)}"]` : null;
   if (selector) els.selectionPanel?.querySelector(selector)?.focus();
 }
+// The selection drawer is modal on every breakpoint, so the whole app behind it
+// (header, main content incl. the filter sidebar, back-to-top) must be inert while
+// it is open. These regions are never inerted by other logic, so toggling them from
+// the open state is safe.
+function selectionBackgroundRegions() {
+  return [document.querySelector(".app-header"), document.querySelector(".app-shell"), els.backToTop];
+}
 function syncSelectionA11y() {
   const open = state.selectionPanelOpen;
   els.selectionPanel.setAttribute("aria-hidden", String(!open));
   els.selectionPanel.toggleAttribute("inert", !open);
+  selectionBackgroundRegions().forEach(region => region?.toggleAttribute("inert", open));
   syncSelectionFocusableFallback(!open);
   if (open) {
     els.selectionPanel.setAttribute("role", "dialog");
@@ -181,7 +203,7 @@ export function renderSelectionPanel() {
     createElement("div", { className: "selection-panel__header" }, [
       createElement("div", {}, [
         createElement("p", { className: "eyebrow", text: "Exploration" }),
-        createElement("h2", { text: "Sélection temporaire", attrs: { id: "selectionPanelHeading" } }),
+        createElement("h2", { text: "Ma sélection", attrs: { id: "selectionPanelHeading" } }),
         createElement("p", { text: pluralize(state.selection.size, "film sélectionné", "films sélectionnés") })
       ]),
       createElement("div", { className: "selection-panel__header-actions" }, [clearButton, closeButton])

@@ -1,6 +1,8 @@
 {
   "name": "Explorateur de films",
   "short_name": "Films",
+  "lang": "fr",
+  "dir": "ltr",
   "description": "Explorez une bibliothèque de films par genre, acteur, réalisateur, durée, pays et note IMDb.",
   "start_url": "./",
   "scope": "./",

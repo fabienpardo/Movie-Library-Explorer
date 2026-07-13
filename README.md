@@ -91,16 +91,20 @@ Browser E2E tests block external image requests to keep the suite deterministic.
 
 ## Local development
 
-No install step is required for the app itself. Node is only used for tests.
+No install step is required for the app itself. Node is only used for tests, and the
+dev tooling (ESLint, c8) is pinned via `package-lock.json` — install it once with
+`npm ci` before running the suites:
 
 ```bash
+npm ci
+npm run lint
 npm run test:unit
 npm run test:assets
 npm run test:e2e
 npm test
 ```
 
-Coverage is optional and uses `c8` on demand:
+Coverage uses `c8` and enforces minimum thresholds (build fails below them):
 
 ```bash
 npm run test:coverage
@@ -171,20 +175,24 @@ This keeps GitHub Pages deployment simple while allowing the app code to be orga
 
 ## Tests
 
-The test suite has three layers:
+The test suite has five layers:
 
 - Unit/data regression tests for parsing, detection, sorting, filtering, IDs, cache behavior, and safety helpers.
 - Static asset tests for cache-busting, removed-code guards, asset references, CSS section order, safe-rendering guards, and project invariants.
+- Service-worker behavior tests (`tests/sw.test.js`) that load `sw.js` in a mocked worker scope and exercise CSV validation/fallback, cache-poisoning prevention, activation/cache-migration, and poster fail-open.
 - Browser E2E tests using Chromium and the Chrome DevTools Protocol, with external image loading blocked for determinism.
+- A localhost smoke test (`tests/smoke.browser.test.js`) that serves the real, unmodified app over `http://127.0.0.1` and verifies the production entry point boots, the fixture loads, and the service worker registers/activates and precaches the shell.
 
 Common test-runner, app-fixture, and browser-lifecycle logic lives under `tests/helpers/` so individual test files focus on scenarios instead of boilerplate.
 
 Current expected result:
 
 ```text
-27/27 regression scenarios passed.
-12/12 static asset scenarios passed.
-16/16 browser E2E scenarios passed.
+30/30 regression scenarios passed.
+13/13 static asset scenarios passed.
+10/10 service worker scenarios passed.
+17/17 browser E2E scenarios passed.
+1/1 smoke scenarios passed.
 ```
 
 ## Deployment

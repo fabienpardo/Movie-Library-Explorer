@@ -61,12 +61,20 @@ export function createEmptyStateNode() {
 // Keyed reconciliation: reuse existing card nodes (and their already-loaded poster
 // images) for movies still present, refreshing only the body and the order. This
 // keeps posters from reloading when filters, search, or sort change the result set.
+// Drop the image sources of a card that is leaving the pool for good, so the browser
+// can release its decoded poster memory promptly instead of holding it until GC.
+// removeAttribute (not src="") avoids re-requesting the document URL.
+function releaseCardImages(node) {
+  node?.querySelectorAll("img").forEach(img => img.removeAttribute("src"));
+}
 function stashCardNode(id, node) {
   if (!id) return;
   cardNodeCache.delete(id);
   cardNodeCache.set(id, node);
   while (cardNodeCache.size > CARD_CACHE_LIMIT) {
-    cardNodeCache.delete(cardNodeCache.keys().next().value);
+    const oldestId = cardNodeCache.keys().next().value;
+    releaseCardImages(cardNodeCache.get(oldestId));
+    cardNodeCache.delete(oldestId);
   }
 }
 function takeCardNode(id, row, index) {
@@ -147,7 +155,8 @@ function syncCardSelectionButton(node) {
   const button = node.querySelector("button[data-selection-id]");
   if (!button) return;
   const selected = state.selection.has(button.dataset.selectionId);
-  const label = selected ? "Retirer de la sélection" : "Ajouter à la sélection";
+  const title = node.querySelector("h2")?.textContent?.trim() || "";
+  const label = selectionToggleLabel(selected, title);
   button.classList.toggle("is-selected", selected);
   button.setAttribute("aria-pressed", String(selected));
   button.setAttribute("aria-label", label);
@@ -155,12 +164,35 @@ function syncCardSelectionButton(node) {
   const symbol = button.querySelector("span");
   if (symbol) symbol.textContent = selected ? "✓" : "+";
 }
+// Everything the card *body* renders that can change between renders: the poster
+// priority bucket (from list position) and the selected-state of the genre chips and
+// credit tokens it contains. The meta row is immutable per row, and the banner's saga
+// badge + selection toggle are synced separately below, so they're excluded. When this
+// signature is unchanged (e.g. Load More appends without touching prior cards, or a
+// filter toggle that doesn't involve this card's tokens) the body rebuild is skipped.
+function cardBodySignature(model, index) {
+  const sel = state.selected;
+  const priority = index < HIGH_PRIORITY_POSTER_COUNT ? "H" : index < EAGER_POSTER_COUNT ? "E" : "L";
+  return [
+    priority,
+    model.genres.map(value => (sel.genre.has(value) ? "1" : "0")).join(""),
+    model.actors.map(value => (sel.actor.has(value) ? "1" : "0")).join(""),
+    model.directors.map(value => (sel.director.has(value) ? "1" : "0")).join("")
+  ].join("|");
+}
 function updateCardContent(node, row, index) {
   const model = movieViewModel(row);
-  const body = node.querySelector(".movie-card__body");
-  if (body) replaceChildren(body, createMovieCardBodyNodes(model));
-  syncPosterPriority(node, posterPriorityForIndex(index));
+  const signature = cardBodySignature(model, index);
+  if (node.__cardBodySignature !== signature) {
+    node.__cardBodySignature = signature;
+    const body = node.querySelector(".movie-card__body");
+    if (body) replaceChildren(body, createMovieCardBodyNodes(model));
+    syncPosterPriority(node, posterPriorityForIndex(index));
+  }
 
+  // Banner controls are cheap in-place updates and are kept in sync unconditionally:
+  // the selection toggle in particular can change while a card is detached (via the
+  // selection panel), which the body signature deliberately doesn't track.
   const badge = node.querySelector('.franchise-badge[data-card-filter-category="saga"]');
   if (badge) syncCardButtonState(badge, (state.selected.saga || new Set()).has(model.saga));
   syncCardSelectionButton(node);
@@ -218,10 +250,15 @@ function createMovieTitleNodes(model) {
   }
   return [h2, model.originalTitle ? createElement("p", { className: "original-title", text: model.originalTitle }) : null].filter(Boolean);
 }
+export function selectionToggleLabel(selected, title) {
+  const base = selected ? "Retirer de la sélection" : "Ajouter à la sélection";
+  return title ? `${base} : ${title}` : base;
+}
 function createSelectionButtonNode(rowOrModel) {
   const id = rowOrModel.id || movieId(rowOrModel);
+  const title = rowOrModel.title || displayTitle(rowOrModel);
   const selected = state.selection.has(id);
-  const label = selected ? "Retirer de la sélection" : "Ajouter à la sélection";
+  const label = selectionToggleLabel(selected, title);
   const button = createElement("button", {
     className: ["selection-toggle", selected ? "is-selected" : ""],
     attrs: { type: "button", "aria-label": label, title: label },
@@ -325,6 +362,8 @@ export function createMovieCardNode(row, options = {}) {
     className: ["movie-card", "movie-card--media", model.posterUrl ? "movie-card--with-poster" : ""],
     dataset: { movieId: model.id }
   });
+  // Seed the body signature so the next render can skip rebuilding an unchanged body.
+  card.__cardBodySignature = cardBodySignature(model, options.index);
   const thumb = model.posterUrl
     ? createMoviePosterNode(model, "card-thumb", priority)
     : createElement("figure", { className: "movie-poster card-thumb card-thumb--empty", attrs: { "aria-hidden": "true" } });

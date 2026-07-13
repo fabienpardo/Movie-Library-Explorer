@@ -43,7 +43,14 @@ export const DEFAULT_MATCH_MODE = { genre: "all", actor: "all", director: "all" 
 export const STORAGE_KEYS = {
   selection: "movieExplorer.selection"
 };
-export const CARD_CACHE_LIMIT = 800;
 export const INITIAL_VISIBLE_MOVIES = 40;
 export const LOAD_MORE_MOVIES = 40;
+// Detached-card reuse pool. Bounded to ~two visible batches so filtering the whole
+// library to zero can't retain every film's DOM + decoded poster; evicted cards get
+// their image sources released (see render-cards.mjs). Beyond the cap, a returning
+// card is simply rebuilt (its poster still paints instantly from loadedPosters).
+export const CARD_CACHE_LIMIT = 2 * LOAD_MORE_MOVIES;
 export const OPTION_COUNTS_CACHE_LIMIT = 80;
+// Abort a CSV load that neither resolves nor rejects, so a stalled request can't
+// leave the app stuck on the loading message forever.
+export const LOAD_TIMEOUT_MS = 20000;

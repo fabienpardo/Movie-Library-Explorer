@@ -395,7 +395,9 @@ h1 {
 .filter-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  /* Above the sticky header (z-index 30) so the header search field is covered by the
+     scrim and can't be clicked while the filter dialog is open. */
+  z-index: 40;
   background: rgba(0, 0, 0, 0.38);
 }
 
@@ -404,9 +406,9 @@ h1 {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 30;
+  z-index: 50;
   max-height: min(86svh, 720px);
-  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  padding: 8px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   border: 1px solid var(--line-strong);
   border-radius: 24px 24px 0 0;
   background: var(--panel);
@@ -721,13 +723,11 @@ h1 {
   contain-intrinsic-size: auto 520px;
 }
 
-.movie-card--with-poster {
-  display: grid;
-  grid-template-columns: 108px minmax(0, 1fr);
-  gap: 15px;
-  align-items: start;
-  padding: 14px;
-}
+/* NOTE: `.movie-card--with-poster` only ever appears together with `.movie-card--media`
+   (see createMovieCardNode), which sets `display: block; padding: 0` further down, so the
+   old horizontal-grid layout that used to live here is fully overridden. The block was
+   removed as dead code; the responsive rules below keep only their still-live padding /
+   font-size (their grid-template-columns/gap were inert on a block element). */
 
 .movie-card__body {
   min-width: 0;
@@ -1147,11 +1147,13 @@ h1 {
 
 .credit-label {
   margin-bottom: 4px;
-  font-size: 9px;
+  /* 11px + the --muted token clears the 4.5:1 normal-text contrast floor; the prior
+     9px/--c-faint (#5a5248) sat at ~2.4:1 and was hard to read for everyone. */
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--c-faint);
+  color: var(--muted);
 }
 
 .movie-card--media .credit-value { color: var(--c-sub); }
@@ -1210,6 +1212,37 @@ h1 {
   color: var(--on-accent);
 }
 
+/* Coarse-pointer (touch) hit areas. The tightly packed card controls measure well
+   below a usable tap size on phones (credit ~16px, genre ~20px, saga ~24px, select
+   ~34px). Grow them on touch only so the compact desktop layout is untouched: the
+   standalone select toggle reaches 44px; the inline credit/genre/saga controls clear
+   the 24px-target-plus-spacing floor. */
+@media (pointer: coarse) {
+  .movie-card--media .selection-toggle {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .movie-card--media .credit-token {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+  }
+  .movie-card--media .genre-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .franchise-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+  }
+}
+
 
 
 /* ============================================================
@@ -1249,7 +1282,7 @@ h1 {
   width: min(420px, 92vw);
   height: 100%;
   margin: 0;
-  padding: calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));
+  padding: calc(18px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   border-left: 1px solid var(--line-strong);
   background: var(--panel);
   box-shadow: -20px 0 60px rgba(0, 0, 0, 0.6);
@@ -1588,7 +1621,7 @@ h1 {
 
 @media (max-width: 759px) {
   .result-summary { margin-inline: -2px; }
-  .movie-card--with-poster { grid-template-columns: 98px minmax(0, 1fr); gap: 12px; padding: 13px; }
+  .movie-card--with-poster { padding: 13px; }
   .movie-card--with-poster h2 { font-size: clamp(18px, 4.7vw, 21px); }
   .movie-poster { border-radius: 14px; }
 }
@@ -1598,17 +1631,13 @@ h1 {
 }
 
 @media (min-width: 560px) {
-  .movie-card--with-poster { grid-template-columns: 122px minmax(0, 1fr); gap: 16px; padding: 16px; }
+  .movie-card--with-poster { padding: 16px; }
 }
 
 @media (min-width: 760px) {
-  .movie-card--with-poster { grid-template-columns: 100px minmax(0, 1fr); gap: 13px; padding: 14px; }
+  .movie-card--with-poster { padding: 14px; }
   .movie-card--with-poster h2 { font-size: 19px; }
   .movie-card--with-poster .original-title { font-size: 13px; }
-}
-
-@media (min-width: 1180px) {
-  .movie-card--with-poster { grid-template-columns: 108px minmax(0, 1fr); gap: 14px; }
 }
 
 @media (max-width: 759px) {
@@ -1636,6 +1665,11 @@ h1 {
   .selection-toggle { transition: none; }
   .selection-toggle:active { transform: none; }
   .selection-panel { transition: none; }
+  /* Match the selection panel: the filter sheet slide and the back-to-top fade also
+     honour the user's reduced-motion preference. JS-driven smooth scrolls are gated
+     separately (see prefersReducedMotion in filter-panel.mjs). */
+  .filter-panel { transition: none; }
+  .back-to-top { transition: none; }
 }
 
 @media (max-width: 759px) {
