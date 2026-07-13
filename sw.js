@@ -49,15 +49,42 @@ self.addEventListener("install", event => {
   );
 });
 
+// Copy any previous versioned data cache (`mlx-<version>-data`) into the stable
+// `mlx-data` cache, then drop it. Earlier releases stored the CSV under a versioned
+// name; without this migration, switching to a version-independent cache would strand
+// (and eventually delete) the last known-good dataset on the very upgrade that is
+// supposed to preserve it — leaving a client that updates while Google Sheets is down
+// with no offline fallback. Existing `mlx-data` entries are never overwritten.
+async function migrateLegacyDataCaches(keys) {
+  const legacy = keys.filter(key => key.startsWith(CACHE_PREFIX) && key.endsWith("-data") && key !== DATA);
+  if (!legacy.length) return;
+  const dataCache = await caches.open(DATA);
+  for (const name of legacy) {
+    const oldCache = await caches.open(name);
+    for (const request of await oldCache.keys()) {
+      if (await dataCache.match(request)) continue;
+      const response = await oldCache.match(request);
+      if (response) await dataCache.put(request, response);
+    }
+    await caches.delete(name);
+  }
+}
+
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys()
-      // Only purge this app's own old caches: CacheStorage is origin-wide, so a
-      // bare "not current version" filter would wipe other apps on a shared origin.
-      // Keep POSTERS and DATA: both are intentionally version-independent.
-      .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== POSTERS && key !== DATA && !key.startsWith(VERSION)).map(key => caches.delete(key))))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await migrateLegacyDataCaches(keys);
+    // Only purge this app's own old caches: CacheStorage is origin-wide, so a
+    // bare "not current version" filter would wipe other apps on a shared origin.
+    // Keep POSTERS and DATA (version-independent); legacy `-data` caches are handled
+    // by the migration above.
+    await Promise.all(
+      keys
+        .filter(key => key.startsWith(CACHE_PREFIX) && key !== POSTERS && key !== DATA && !key.endsWith("-data") && !key.startsWith(VERSION))
+        .map(key => caches.delete(key))
+    );
+    await self.clients.claim();
+  })());
 });
 
 // A response is only a valid CSV replacement when it is 2xx and not an HTML page.

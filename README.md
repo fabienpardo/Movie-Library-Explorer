@@ -190,7 +190,7 @@ Current expected result:
 ```text
 30/30 regression scenarios passed.
 13/13 static asset scenarios passed.
-10/10 service worker scenarios passed.
+12/12 service worker scenarios passed.
 17/17 browser E2E scenarios passed.
 1/1 smoke scenarios passed.
 ```

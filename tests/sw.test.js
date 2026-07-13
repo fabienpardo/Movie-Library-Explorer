@@ -206,6 +206,36 @@ test("activate: purges old versioned caches but keeps the data, posters and curr
   assert.ok(!remaining.includes("mlx-8.8.10-data"), "old versioned data cache is purged");
 });
 
+test("activate: migrates a previous versioned data cache into the stable data cache", async () => {
+  const sw = loadServiceWorker();
+  const { VERSION, DATA } = sw.consts;
+  // A client updating from an earlier release has its last good CSV under the old
+  // versioned name; activate must carry it over so offline recovery still works.
+  const legacy = sw.cacheStorage.seed(`${VERSION}-data`, new FakeCache());
+  await legacy.put(makeRequest(CSV_URL), csvResponse("PRESERVED"));
+
+  await dispatchActivate(sw);
+
+  const remaining = await sw.cacheStorage.keys();
+  assert.ok(!remaining.includes(`${VERSION}-data`), "the old versioned data cache is removed after migration");
+  const migrated = await sw.cacheStorage.caches.get(DATA).match(makeRequest(CSV_URL));
+  assert.equal(migrated.id, "PRESERVED", "the last good CSV is preserved in the stable data cache");
+});
+
+test("activate: migration does not overwrite a fresher entry already in the stable cache", async () => {
+  const sw = loadServiceWorker();
+  const { VERSION, DATA } = sw.consts;
+  const current = sw.cacheStorage.seed(DATA, new FakeCache());
+  await current.put(makeRequest(CSV_URL), csvResponse("FRESH"));
+  const legacy = sw.cacheStorage.seed(`${VERSION}-data`, new FakeCache());
+  await legacy.put(makeRequest(CSV_URL), csvResponse("STALE"));
+
+  await dispatchActivate(sw);
+
+  const kept = await sw.cacheStorage.caches.get(DATA).match(makeRequest(CSV_URL));
+  assert.equal(kept.id, "FRESH", "an existing stable-cache entry is not clobbered by an older versioned one");
+});
+
 test("poster: a valid image is returned and cached; a cache.put quota error fails open", async () => {
   const sw = loadServiceWorker();
   const postersCache = sw.cacheStorage.seed(sw.consts.POSTERS, new FakeCache({ failPut: true }));
