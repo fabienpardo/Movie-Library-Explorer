@@ -31,6 +31,35 @@ function stopChromium(chromium) {
   });
 }
 
+async function cleanupChromium(chromium) {
+  if (!chromium) return;
+  await stopChromium(chromium);
+  try { fs.rmSync(chromium.profileDir, { recursive: true, force: true }); } catch {}
+}
+
+async function startChromiumWithRetry(testName, options = {}) {
+  const start = options.start || startChromium;
+  const cleanup = options.cleanup || cleanupChromium;
+  const wait = options.wait || withTimeout;
+  const onRetry = options.onRetry || ((attempt, error) => console.warn(`Chromium startup attempt ${attempt} failed; retrying once. ${error.message}`));
+  const attempts = options.attempts ?? 2;
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const chromium = start();
+    try {
+      const { wsUrl: browserWsUrl } = await wait(chromium.ready, 15000, `start Chromium for ${testName}`);
+      return { chromium, browserWsUrl };
+    } catch (error) {
+      lastError = error;
+      await cleanup(chromium);
+      if (attempt < attempts) onRetry(attempt, error);
+    }
+  }
+
+  throw lastError;
+}
+
 async function setupBrowserTests(testName = 'browser E2E tests') {
   const skipReason = browserTestSkipReason();
   if (skipReason) {
@@ -43,15 +72,12 @@ async function setupBrowserTests(testName = 'browser E2E tests') {
     return { skipped: true };
   }
 
-  const chromium = startChromium();
-  const { wsUrl: browserWsUrl } = await withTimeout(chromium.ready, 15000, `start Chromium for ${testName}`);
-  return { chromium, browserWsUrl };
+  return startChromiumWithRetry(testName);
 }
 
 async function teardownBrowserTests(context) {
   if (!context || context.skipped) return;
-  await stopChromium(context.chromium);
-  try { fs.rmSync(context.chromium.profileDir, { recursive: true, force: true }); } catch {}
+  await cleanupChromium(context.chromium);
 }
 
 async function assertNoBrowserDiagnostics(testCase) {
@@ -86,4 +112,11 @@ async function runOneBrowserTest(testCase) {
   }
 }
 
-module.exports = { runBrowserTests, runOneBrowserTest, setupBrowserTests, teardownBrowserTests, assertNoBrowserDiagnostics };
+module.exports = {
+  assertNoBrowserDiagnostics,
+  runBrowserTests,
+  runOneBrowserTest,
+  setupBrowserTests,
+  startChromiumWithRetry,
+  teardownBrowserTests
+};
