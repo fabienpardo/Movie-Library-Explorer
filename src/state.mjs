@@ -85,6 +85,8 @@ export function loadPersistentState() {
   }
 }
 export function persistSelection() {
+  // The stored array's order is user-visible (the drawer's reorder feature): Set iteration
+  // order is insertion order, so preserve it here and on load — never sort or rebuild blindly.
   if (state.selection.size) writeStoredValue(STORAGE_KEYS.selection, JSON.stringify([...state.selection]));
   else removeStoredValue(STORAGE_KEYS.selection);
 }

@@ -422,6 +422,137 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   assert.equal(await evaluate(page, `localStorage.getItem('movieExplorer.selection')`), null);
 });
 
+test('selection items can be reordered from the keyboard', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await evaluateFunction(page, () => {
+    [...document.querySelectorAll('.movie-card button[data-selection-id]')].slice(0, 2).forEach(button => button.click());
+  });
+  await waitForExpression(page, `document.querySelector('#selectionCount').textContent.trim() === '2'`, 'two movies selected');
+  await click(page, '#toggleSelectionPanel');
+  await waitForExpression(page, `document.querySelectorAll('#selectionPanel .selection-item').length === 2`, 'panel lists two items');
+
+  const before = await evaluateFunction(page, () => ({
+    order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+    stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]')
+  }));
+
+  const after = await evaluateFunction(page, () => {
+    const second = [...document.querySelectorAll('#selectionPanel button[data-selection-move-id]')][1];
+    const movedId = second.dataset.selectionMoveId;
+    second.focus();
+    second.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+    return {
+      order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+      stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]'),
+      focusOnMoved: document.activeElement?.dataset?.selectionMoveId === movedId,
+      live: document.querySelector('#selectionPanel [aria-live]')?.textContent || ''
+    };
+  });
+
+  assert.deepEqual(after.order, [before.order[1], before.order[0]]);
+  assert.deepEqual(after.stored, [before.stored[1], before.stored[0]]);
+  assert.equal(after.focusOnMoved, true);
+  assert.match(after.live, /position 1/);
+});
+
+test('press-and-hold dragging a title reorders the list; a quick drag does not', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await evaluateFunction(page, () => {
+    [...document.querySelectorAll('.movie-card button[data-selection-id]')].slice(0, 2).forEach(button => button.click());
+  });
+  await waitForExpression(page, `document.querySelector('#selectionCount').textContent.trim() === '2'`, 'two movies selected');
+  await click(page, '#toggleSelectionPanel');
+  await waitForExpression(page, `document.querySelectorAll('#selectionPanel .selection-item').length === 2`, 'panel lists two items');
+
+  const before = await evaluateFunction(page, () => ({
+    order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+    stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]')
+  }));
+
+  // A quick drag (no hold) must NOT reorder — that gesture belongs to scrolling.
+  const quick = await evaluateFunction(page, () => {
+    const grip = document.querySelectorAll('#selectionPanel [data-selection-move-id]')[0];
+    const rect = grip.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', clientX: x, ...extra });
+    grip.dispatchEvent(new PointerEvent('pointerdown', opts({ clientY: rect.top + rect.height / 2 })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: rect.top + rect.height / 2 + 120 })));
+    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientY: rect.top + rect.height / 2 + 120 })));
+    return [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim());
+  });
+  assert.deepEqual(quick, before.order);
+
+  // Press and hold, then drag the first item's title past the second: reorders.
+  await evaluateFunction(page, () => {
+    const grip = document.querySelectorAll('#selectionPanel [data-selection-move-id]')[0];
+    const rect = grip.getBoundingClientRect();
+    window.__reorderX = rect.left + rect.width / 2;
+    window.__reorderY = rect.top + rect.height / 2;
+    grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 2, pointerType: 'touch', clientX: window.__reorderX, clientY: window.__reorderY }));
+  });
+  await new Promise(resolve => setTimeout(resolve, 450)); // let the long-press hold elapse
+
+  const after = await evaluateFunction(page, () => {
+    const target = document.querySelectorAll('#selectionPanel .selection-item')[1].getBoundingClientRect();
+    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 2, pointerType: 'touch', clientX: window.__reorderX, ...extra });
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: window.__reorderY + 15 })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: target.top + target.height * 0.75 })));
+    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientY: target.top + target.height * 0.75 })));
+    return {
+      order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+      stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]')
+    };
+  });
+
+  assert.deepEqual(after.order, [before.order[1], before.order[0]]);
+  assert.deepEqual(after.stored, [before.stored[1], before.stored[0]]);
+});
+
+test('swiping the drawer to the right closes it, vertical drags do not', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl, { mobile: true });
+  await evaluateFunction(page, () => document.querySelector('.movie-card button[data-selection-id]').click());
+  await click(page, '#toggleSelectionPanel');
+  await waitForExpression(page, `document.querySelector('#selectionPanel').classList.contains('is-open')`, 'drawer open');
+
+  // A near-vertical drag must not close the drawer.
+  await evaluateFunction(page, () => {
+    const panel = document.querySelector('#selectionPanel');
+    const rect = panel.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.bottom - 120;
+    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 2, pointerType: 'touch', clientX: x, ...extra });
+    panel.dispatchEvent(new PointerEvent('pointerdown', opts({ clientY: y })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: y - 130 })));
+    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientY: y - 130 })));
+  });
+  assert.equal(await evaluate(page, `document.querySelector('#selectionPanel').classList.contains('is-open')`), true);
+
+  // A decisive right-swipe closes it.
+  await evaluateFunction(page, () => {
+    const panel = document.querySelector('#selectionPanel');
+    const rect = panel.getBoundingClientRect();
+    const startX = rect.left + 40;
+    const y = rect.bottom - 120;
+    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 3, pointerType: 'touch', clientY: y, ...extra });
+    panel.dispatchEvent(new PointerEvent('pointerdown', opts({ clientX: startX })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientX: startX + 60 })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientX: startX + 280 })));
+    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientX: startX + 280 })));
+  });
+  await waitForExpression(page, `!document.querySelector('#selectionPanel').classList.contains('is-open')`, 'drawer closed after swipe');
+
+  const closed = await evaluateFunction(page, () => ({
+    ariaHidden: document.querySelector('#selectionPanel').getAttribute('aria-hidden'),
+    inert: document.querySelector('#selectionPanel').hasAttribute('inert'),
+    backdropHidden: document.querySelector('#selectionBackdrop').hidden,
+    bodyClass: document.body.classList.contains('selection-open')
+  }));
+  assert.equal(closed.ariaHidden, 'true');
+  assert.equal(closed.inert, true);
+  assert.equal(closed.backdropHidden, true);
+  assert.equal(closed.bodyClass, false);
+});
+
 test('failed reload clears stale cards, active filters and filter lists', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   await clickFilterOptionByLabel(page, '#genreList', 'Action');

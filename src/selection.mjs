@@ -8,8 +8,12 @@ import { createMovieCardNode, selectionToggleLabel } from "./render-cards.mjs";
 import { renderResultSummary } from "./render-filters.mjs";
 
 export function selectedRows() {
-  const selectedIds = state.selection;
-  return state.rows.filter(row => selectedIds.has(movieId(row)));
+  // state.selection is a Set, and Set iteration order is insertion order — which is
+  // exactly the order shown in the drawer and persisted to localStorage (see
+  // persistSelection). Map ids to rows in that order rather than filtering state.rows,
+  // so a user-chosen reorder (moveSelectionItemTo) is honoured instead of dataset order.
+  const rowsById = new Map(state.rows.map(row => [movieId(row), row]));
+  return [...state.selection].map(id => rowsById.get(id)).filter(Boolean);
 }
 export function syncSelectionCount() {
   els.selectionCount.textContent = String(state.selection.size);
@@ -45,6 +49,48 @@ export function clearSelection() {
   state.selectionDetailId = "";
   persistSelection();
   syncSelectionUI();
+}
+// Reordering is just rebuilding the insertion-ordered Set: the new order becomes the
+// drawer order (selectedRows) and the persisted order (persistSelection) in one step.
+export function moveSelectionItemTo(id, toIndex) {
+  if (!id || !state.selection.has(id)) return false;
+  const ids = [...state.selection];
+  const from = ids.indexOf(id);
+  const to = Math.max(0, Math.min(ids.length - 1, toIndex));
+  if (to === from) return false;
+  ids.splice(to, 0, ...ids.splice(from, 1));
+  state.selection = new Set(ids);
+  persistSelection();
+  renderSelectionPanel();
+  return true;
+}
+export function moveSelectionItem(id, direction) {
+  if (!id || !state.selection.has(id)) return false;
+  return moveSelectionItemTo(id, [...state.selection].indexOf(id) + direction);
+}
+// A single, stable aria-live node reused across every renderSelectionPanel rebuild.
+// It must live inside the panel (the rest of the app is inert while the drawer is open,
+// so an outside live region would be muted), and keep DOM identity so announcements fire.
+let selectionLiveRegionNode = null;
+function selectionLiveRegion() {
+  if (!selectionLiveRegionNode) {
+    selectionLiveRegionNode = createElement("p", { className: "visually-hidden", attrs: { "aria-live": "polite", role: "status" } });
+  }
+  return selectionLiveRegionNode;
+}
+export function moveSelectionItemByKeyboard(id, direction) {
+  if (!state.selection.has(id)) return;
+  if (!moveSelectionItem(id, direction)) return; // no-op at the first/last position
+  const ids = [...state.selection];
+  const index = ids.indexOf(id);
+  const row = state.rows.find(candidate => movieId(candidate) === id);
+  const title = row ? displayTitle(row) : "";
+  // renderSelectionPanel (called by moveSelectionItem) just reset the live region, so
+  // setting fresh text now announces exactly one message on the reconnected node.
+  selectionLiveRegion().textContent = `${title} déplacé en position ${index + 1} sur ${ids.length}`;
+  // The rebuild dropped focus; return it to the moved item's handle so arrow keys chain.
+  const selector = typeof CSS !== "undefined" && CSS.escape ? `button[data-selection-move-id="${CSS.escape(id)}"]` : null;
+  if (selector) els.selectionPanel?.querySelector(selector)?.focus();
 }
 // Selection does not change which movies are shown or their order, so update the
 // selection controls in place instead of rebuilding the grid (which would reload posters).
@@ -158,10 +204,12 @@ function createSelectionItemNodes(row) {
   const title = displayTitle(row);
   const meta = [cell(row, "year"), mainCountry(cell(row, "country")), formatRuntime(parseRuntime(cell(row, "runtime")))].filter(Boolean).join(" · ");
   const item = createElement("article", { className: ["selection-item", expanded ? "is-expanded" : ""] }, [
+    // The title block is both the detail toggle (tap/Enter) and the reorder grip: drag it
+    // to move the item (press-and-hold on touch), or Arrow Up/Down when it has focus.
     createElement("button", {
       className: "selection-item__summary",
-      attrs: { type: "button", "aria-expanded": String(expanded), "aria-controls": detailId },
-      dataset: { selectionDetailId: id }
+      attrs: { type: "button", "aria-expanded": String(expanded), "aria-controls": detailId, "aria-keyshortcuts": "ArrowUp ArrowDown" },
+      dataset: { selectionDetailId: id, selectionMoveId: id }
     }, [
       createElement("span", { className: "selection-item__text" }, [
         createElement("span", { className: "selection-item__title", text: title }),
@@ -182,6 +230,10 @@ function createSelectionItemNodes(row) {
 }
 export function renderSelectionPanel() {
   if (!els.selectionPanel) return;
+
+  // Clear any prior announcement before the rebuild re-attaches the live region, so a
+  // stale message can't be replayed; moveSelectionItemByKeyboard sets fresh text after.
+  if (selectionLiveRegionNode) selectionLiveRegionNode.textContent = "";
 
   const rows = selectedRows();
   // Detail expansion is tied to selected rows, not the filtered result grid, so users can keep reviewing a shortlist while exploring other filters.
@@ -214,6 +266,7 @@ export function renderSelectionPanel() {
   } else {
     children.push(createElement("p", { className: "selection-empty", text: "Aucun film sélectionné." }));
   }
+  children.push(selectionLiveRegion());
   replaceChildren(els.selectionPanel, children);
   syncSelectionA11y();
 }

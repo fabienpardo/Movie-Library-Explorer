@@ -15,6 +15,7 @@ const modulePaths = {
   config: path.join(srcDir, 'config.mjs'),
   utils: path.join(srcDir, 'utils.mjs'),
   dom: path.join(srcDir, 'dom.mjs'),
+  gestures: path.join(srcDir, 'gestures.mjs'),
   state: path.join(srcDir, 'state.mjs'),
   data: path.join(srcDir, 'data.mjs'),
   sorting: path.join(srcDir, 'sorting.mjs'),
@@ -23,6 +24,7 @@ const modulePaths = {
   'render-cards': path.join(srcDir, 'render-cards.mjs'),
   'render-filters': path.join(srcDir, 'render-filters.mjs'),
   selection: path.join(srcDir, 'selection.mjs'),
+  'selection-gestures': path.join(srcDir, 'selection-gestures.mjs'),
   app: path.join(srcDir, 'app.mjs'),
   'test-hooks': path.join(srcDir, 'test-hooks.mjs')
 };
