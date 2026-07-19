@@ -59,6 +59,41 @@ test('loads the fixture and renders the library without browser errors', async (
   assert.equal(snapshot.loadMoreText, 'Afficher plus');
 });
 
+test('movie titles open Apple TV and IMDb rating badges open IMDb', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await setInputValue(page, '#searchInput', '60 secondes chrono');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === 1`, 'movie with Apple TV and IMDb links');
+  const linked = await evaluateFunction(page, () => {
+    const titleLink = document.querySelector('.movie-title-link');
+    const card = titleLink?.closest('.movie-card');
+    const imdbLink = card?.querySelector('a.imdb-badge');
+    return {
+      titleHref: titleLink?.href || '',
+      titleLabel: titleLink?.getAttribute('aria-label') || '',
+      imdbHref: imdbLink?.href || '',
+      imdbLabel: imdbLink?.getAttribute('aria-label') || ''
+    };
+  });
+  assert.match(linked.titleHref, /^https:\/\/tv\.apple\.com\//);
+  assert.match(linked.titleLabel, /dans Apple TV$/);
+  assert.match(linked.imdbHref, /^https:\/\/(?:www\.)?imdb\.com\//);
+  assert.match(linked.imdbLabel, /sur IMDb$/);
+
+  await setInputValue(page, '#searchInput', 'Daft Punk Unchained');
+  await waitForExpression(page, `document.querySelectorAll('.movie-card').length === 1`, 'movie without an Apple TV link');
+  const missingAppleLink = await evaluateFunction(page, () => {
+    const card = document.querySelector('.movie-card');
+    return {
+      title: card?.querySelector('h2')?.textContent.trim(),
+      hasTitleLink: Boolean(card?.querySelector('h2 a')),
+      imdbHref: card?.querySelector('a.imdb-badge')?.href || ''
+    };
+  });
+  assert.equal(missingAppleLink.title, 'Daft Punk Unchained');
+  assert.equal(missingAppleLink.hasTitleLink, false);
+  assert.equal(missingAppleLink.imdbHref, 'https://www.imdb.com/title/tt3833822/');
+});
+
 test('load more appends another batch and result changes reset to the first batch', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   const initialLimit = await evaluate(page, `window.__MovieExplorerTestHooks.INITIAL_VISIBLE_MOVIES`);

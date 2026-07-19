@@ -24,6 +24,7 @@ export const COLUMNS = {
   position: "Position",
   imdbRating: "IMDb Rating",
   url: "URL",
+  appleTvUrl: "AppleTV link",
   poster: "Poster",
   country: "Country",
   actors: "Main actors",

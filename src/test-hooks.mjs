@@ -15,6 +15,7 @@ import {
   toSafeDomId
 } from "./utils.mjs";
 import {
+  appleTvUrl,
   assignUniqueMovieIds,
   cell,
   csvToTable,
@@ -71,6 +72,7 @@ export function getTestHooks() {
   return {
     activeCount,
     activeFilters,
+    appleTvUrl,
     assignUniqueMovieIds,
     baseOptionCounts,
     categories,

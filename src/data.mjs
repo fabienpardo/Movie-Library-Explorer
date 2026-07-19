@@ -165,6 +165,9 @@ export function safeImageUrl(value) {
 export function movieUrl(row) {
   return httpUrl(cell(row, "url"));
 }
+export function appleTvUrl(row) {
+  return httpUrl(cell(row, "appleTvUrl"));
+}
 // The sheet links full-resolution poster art (often 2000x3000, up to 2560x3840).
 // Cards only ever show it in a ~440px banner and a 78px thumb, so decoding and
 // GPU-compositing 20MB+ textures per poster wrecks scroll on a phone. Both CDNs we
@@ -215,4 +218,3 @@ export function sagaTotal(row) {
   const name = sagaName(row);
   return name ? (sagaTotals().get(normalize(name)) || 0) : 0;
 }
-

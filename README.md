@@ -17,7 +17,8 @@ The app is built for GitHub Pages: no backend, no bundler, and no runtime npm de
 - Saga badges show their selected state when a saga filter is active.
 - Temporary selection is stored in `localStorage` and can be reviewed, expanded, removed, or cleared.
 - Poster URLs are read from the sheet and rendered with fallback initials when loading fails.
-- IMDb title URLs open in a new tab from the movie title.
+- Apple TV URLs open from the movie title; titles without an Apple TV URL remain plain text.
+- IMDb title URLs open from the IMDb rating badge.
 - Mobile filter panel is modal-like, inert when closed, and usable on iPhone Safari.
 
 ## Data source
@@ -48,6 +49,7 @@ Columns are mapped by fixed name in `COLUMNS` (`src/config.mjs`): the published 
 | Original title | `Original Title` |
 | IMDb URL | `URL` |
 | IMDb rating | `IMDb Rating` |
+| Apple TV URL | `AppleTV link` |
 | Runtime | `Runtime (mins)` |
 | Year | `Year` |
 | Release date | `Release Date` |
@@ -199,4 +201,4 @@ Current expected result:
 
 The app can be deployed as static files on GitHub Pages.
 
-When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.11`, and the static asset test validates that version alignment.
+When changing CSS, JavaScript, manifest, or icons, keep cache-busting query strings aligned. The current expected asset version is `8.8.12`, and the static asset test validates that version alignment.

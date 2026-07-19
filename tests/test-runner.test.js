@@ -8,6 +8,7 @@ const {
   shouldRelaunchWithWebSocketFlag,
   supportsExperimentalWebSocketFlag
 } = require('./helpers/run-e2e');
+const { startChromiumWithRetry } = require('./helpers/browser-runner');
 
 async function silenced(fn) {
   const { log, error } = console;
@@ -45,6 +46,44 @@ async function silenced(fn) {
   assert.equal(shouldRelaunchWithWebSocketFlag({ hasWebSocket: false, reexec: undefined, version: '20.10.0' }), true);
   assert.equal(shouldRelaunchWithWebSocketFlag({ hasWebSocket: true, reexec: undefined, version: '20.10.0' }), false);
   assert.equal(shouldRelaunchWithWebSocketFlag({ hasWebSocket: false, reexec: '1', version: '20.10.0' }), false);
+
+  const attempts = [];
+  const cleanedProfiles = [];
+  const browser = await startChromiumWithRetry('retry self-check', {
+    start() {
+      const profileDir = `profile-${attempts.length + 1}`;
+      attempts.push(profileDir);
+      return {
+        profileDir,
+        ready: attempts.length === 1
+          ? Promise.reject(new Error('intentional startup failure'))
+          : Promise.resolve({ wsUrl: 'ws://browser.test', profileDir })
+      };
+    },
+    cleanup: async chromium => cleanedProfiles.push(chromium.profileDir),
+    onRetry() {},
+    wait: promise => promise
+  });
+  assert.equal(browser.browserWsUrl, 'ws://browser.test', 'browser startup should return the successful retry');
+  assert.deepEqual(attempts, ['profile-1', 'profile-2'], 'browser startup should retry once');
+  assert.deepEqual(cleanedProfiles, ['profile-1'], 'failed browser startup should always be cleaned up');
+
+  const failedProfiles = [];
+  let failedAttempt = 0;
+  await assert.rejects(
+    startChromiumWithRetry('failure self-check', {
+      start() {
+        failedAttempt += 1;
+        return { profileDir: `failed-${failedAttempt}`, ready: Promise.reject(new Error(`failure ${failedAttempt}`)) };
+      },
+      cleanup: async chromium => failedProfiles.push(chromium.profileDir),
+      onRetry() {},
+      wait: promise => promise
+    }),
+    /failure 2/,
+    'the final browser startup error should be returned after one retry'
+  );
+  assert.deepEqual(failedProfiles, ['failed-1', 'failed-2'], 'every failed browser process should be cleaned up');
 
   process.exitCode = 0;
   console.log("✓ runner reports thrown errors, failed assertions, clean runs and E2E wrapper decisions correctly");
