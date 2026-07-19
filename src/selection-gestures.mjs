@@ -65,6 +65,7 @@ function autoScroll(panel, clientY) {
 function attachReorder(panel) {
   let dragged = null;
   let list = null;
+  let lastPassthroughY = null;
 
   attachPointerDrag(panel, {
     axis: "y",
@@ -73,7 +74,18 @@ function attachReorder(panel) {
     shouldStart(event) {
       if (activeGesture || !state.selectionPanelOpen) return false;
       const target = event.target;
-      return Boolean(target && typeof target.closest === "function" && target.closest("[data-selection-move-id]"));
+      if (!target || typeof target.closest !== "function") return false;
+      if (!target.closest("[data-selection-move-id]")) return false;
+      lastPassthroughY = null;
+      return true;
+    },
+    // The title block sets touch-action:none (otherwise the browser claims the vertical pan
+    // and fires pointercancel mid-drag, so a reorder could never complete on touch). That
+    // also means it no longer scrolls natively, so a pre-hold drag scrolls the panel here.
+    onPassthrough({ event, startEvent }) {
+      const previous = lastPassthroughY === null ? startEvent.clientY : lastPassthroughY;
+      panel.scrollTop -= event.clientY - previous;
+      lastPassthroughY = event.clientY;
     },
     onClaim({ startEvent }) {
       activeGesture = "reorder";

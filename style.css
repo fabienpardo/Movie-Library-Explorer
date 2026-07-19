@@ -1388,6 +1388,11 @@ a.imdb-badge:focus-visible {
   color: inherit;
   text-align: left;
   cursor: grab;
+  /* The title block is the reorder drag source. It must own the vertical axis: with any
+     pan-* value the browser claims the pan and cancels the pointer mid-drag, so a
+     press-and-hold reorder can never complete on touch. Scrolling from here is driven by
+     onPassthrough in selection-gestures.mjs instead. */
+  touch-action: none;
 }
 
 .selection-item.is-dragging-item .selection-item__summary { cursor: grabbing; }

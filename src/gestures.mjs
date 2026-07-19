@@ -16,12 +16,17 @@
 //   onClaim({ event, startEvent })  the drag activated (crossed slop, or the hold elapsed)
 //   onMove({ dx, dy, event, startEvent })   per-move delta from the start point (claimed only)
 //   onEnd({ dx, dy, vx, vy, cancelled, event, startEvent })   drop or cancel (claimed only)
+//   onPassthrough({ dx, dy, event, startEvent })   long-press mode only: moves after the hold
+//     was aborted by movement. Because a long-press drag source must set `touch-action: none`
+//     (or the browser claims the pan and cancels the pointer mid-drag), the browser no longer
+//     scrolls for it — this hook lets the caller drive that scroll. Omit it to simply abort.
 // `startEvent` is always the original pointerdown — use it (not `event`) to read the
 // drag's origin element, since pointer capture retargets later events to `element`.
 // Returns a detach() function.
-export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, holdSlop = 8, shouldStart, onClaim, onMove, onEnd } = {}) {
+export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, holdSlop = 8, shouldStart, onClaim, onMove, onEnd, onPassthrough } = {}) {
   let active = false;
   let claimed = false;
+  let passthrough = false;
   let pointerId = null;
   let startX = 0;
   let startY = 0;
@@ -40,6 +45,7 @@ export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, hol
   function teardown() {
     active = false;
     claimed = false;
+    passthrough = false;
     pointerId = null;
     startEvent = null;
     samples = [];
@@ -84,10 +90,16 @@ export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, hol
     if (samples.length > 6) samples.shift();
 
     if (!claimed) {
+      if (passthrough) { onPassthrough({ dx, dy, event, startEvent }); return; }
       if (holdTimer) {
         // Long-press pending: real movement means the user is scrolling or tapping, not
-        // holding to reorder — abort so the browser handles it.
-        if (Math.hypot(dx, dy) > holdSlop) teardown();
+        // holding to reorder. Hand the rest of the gesture to onPassthrough (the drag source
+        // sets touch-action:none, so the browser won't scroll it for us), or just abort.
+        if (Math.hypot(dx, dy) <= holdSlop) return;
+        clearHold();
+        if (!onPassthrough) { teardown(); return; }
+        passthrough = true;
+        onPassthrough({ dx, dy, event, startEvent });
         return;
       }
       // Immediate activation: claim once past slop on the right axis.

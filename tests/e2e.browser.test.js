@@ -455,57 +455,99 @@ test('selection items can be reordered from the keyboard', async ({ browserWsUrl
   assert.match(after.live, /position 1/);
 });
 
-test('press-and-hold dragging a title reorders the list; a quick drag does not', async ({ browserWsUrl }) => {
-  const { page } = await createPage(browserWsUrl);
-  await evaluateFunction(page, () => {
-    [...document.querySelectorAll('.movie-card button[data-selection-id]')].slice(0, 2).forEach(button => button.click());
+// Real CDP touch events, unlike synthetic PointerEvents, go through the browser's actual
+// input pipeline and so honour touch-action. That matters here: if the drag source ever
+// allows the browser to pan, it claims the gesture and fires pointercancel mid-drag, and
+// touch reordering silently stops working — a regression synthetic events cannot catch.
+function touchSequence(page, x) {
+  return (type, y) => page.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }]
   });
-  await waitForExpression(page, `document.querySelector('#selectionCount').textContent.trim() === '2'`, 'two movies selected');
-  await click(page, '#toggleSelectionPanel');
-  await waitForExpression(page, `document.querySelectorAll('#selectionPanel .selection-item').length === 2`, 'panel lists two items');
+}
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-  const before = await evaluateFunction(page, () => ({
+async function openDrawerWith(page, count) {
+  await evaluateFunction(page, n => {
+    [...document.querySelectorAll('.movie-card button[data-selection-id]')].slice(0, n).forEach(button => button.click());
+  }, count);
+  await waitForExpression(page, `document.querySelector('#selectionCount').textContent.trim() === '${count}'`, `${count} movies selected`);
+  await click(page, '#toggleSelectionPanel');
+  await waitForExpression(page, `document.querySelectorAll('#selectionPanel .selection-item').length === ${count}`, 'drawer lists items');
+}
+
+test('real touch: press-and-hold drags a title to reorder, a quick drag does not', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl, { mobile: true });
+  await openDrawerWith(page, 2);
+
+  const geo = await evaluateFunction(page, () => {
+    const items = [...document.querySelectorAll('#selectionPanel .selection-item')];
+    const grip = items[0].querySelector('[data-selection-move-id]').getBoundingClientRect();
+    const target = items[1].getBoundingClientRect();
+    return {
+      before: items.map(item => item.querySelector('.selection-item__title').textContent.trim()),
+      x: Math.round(grip.left + grip.width / 2),
+      y: Math.round(grip.top + grip.height / 2),
+      targetY: Math.round(target.top + target.height * 0.8)
+    };
+  });
+  const touch = touchSequence(page, geo.x);
+
+  // Quick drag (no hold): scrolls, never reorders.
+  await touch('touchStart', geo.y);
+  for (let step = 1; step <= 4; step++) await touch('touchMove', geo.y + step * 25);
+  await touch('touchEnd', geo.y + 100);
+  await sleep(80);
+  const quick = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
+  assert.deepEqual(quick, geo.before, 'a quick drag must not reorder');
+
+  // Press and hold, then drag past the second item: reorders.
+  await touch('touchStart', geo.y);
+  await sleep(450);
+  for (let step = 1; step <= 6; step++) {
+    await touch('touchMove', Math.round(geo.y + (geo.targetY - geo.y) * (step / 6)));
+    await sleep(25);
+  }
+  await touch('touchEnd', geo.targetY);
+  await sleep(120);
+
+  const after = await evaluateFunction(page, () => ({
     order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
     stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]')
   }));
+  assert.deepEqual(after.order, [geo.before[1], geo.before[0]], 'press-and-hold drag should reorder');
+  assert.equal(after.stored.length, 2);
+});
 
-  // A quick drag (no hold) must NOT reorder — that gesture belongs to scrolling.
-  const quick = await evaluateFunction(page, () => {
-    const grip = document.querySelectorAll('#selectionPanel [data-selection-move-id]')[0];
-    const rect = grip.getBoundingClientRect();
-    const x = rect.left + rect.width / 2;
-    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', clientX: x, ...extra });
-    grip.dispatchEvent(new PointerEvent('pointerdown', opts({ clientY: rect.top + rect.height / 2 })));
-    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: rect.top + rect.height / 2 + 120 })));
-    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientY: rect.top + rect.height / 2 + 120 })));
-    return [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim());
-  });
-  assert.deepEqual(quick, before.order);
+test('real touch: dragging a title still scrolls the drawer', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl, { mobile: true });
+  await openDrawerWith(page, 14); // enough items to overflow the panel
 
-  // Press and hold, then drag the first item's title past the second: reorders.
-  await evaluateFunction(page, () => {
-    const grip = document.querySelectorAll('#selectionPanel [data-selection-move-id]')[0];
-    const rect = grip.getBoundingClientRect();
-    window.__reorderX = rect.left + rect.width / 2;
-    window.__reorderY = rect.top + rect.height / 2;
-    grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 2, pointerType: 'touch', clientX: window.__reorderX, clientY: window.__reorderY }));
-  });
-  await new Promise(resolve => setTimeout(resolve, 450)); // let the long-press hold elapse
-
-  const after = await evaluateFunction(page, () => {
-    const target = document.querySelectorAll('#selectionPanel .selection-item')[1].getBoundingClientRect();
-    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 2, pointerType: 'touch', clientX: window.__reorderX, ...extra });
-    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: window.__reorderY + 15 })));
-    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: target.top + target.height * 0.75 })));
-    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientY: target.top + target.height * 0.75 })));
+  const geo = await evaluateFunction(page, () => {
+    const panel = document.querySelector('#selectionPanel');
+    const grip = document.querySelectorAll('#selectionPanel [data-selection-move-id]')[3].getBoundingClientRect();
     return {
-      order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
-      stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]')
+      scrollable: panel.scrollHeight > panel.clientHeight,
+      scrollTop: panel.scrollTop,
+      x: Math.round(grip.left + grip.width / 2),
+      y: Math.round(grip.top + grip.height / 2)
     };
   });
+  assert.equal(geo.scrollable, true, 'fixture should overflow the drawer');
+  assert.equal(geo.scrollTop, 0);
 
-  assert.deepEqual(after.order, [before.order[1], before.order[0]]);
-  assert.deepEqual(after.stored, [before.stored[1], before.stored[0]]);
+  // The title block sets touch-action:none, so this scroll comes from the JS passthrough.
+  const touch = touchSequence(page, geo.x);
+  await touch('touchStart', geo.y);
+  for (let step = 1; step <= 5; step++) {
+    await touch('touchMove', geo.y - step * 30);
+    await sleep(16);
+  }
+  await touch('touchEnd', geo.y - 150);
+  await sleep(80);
+
+  const scrolled = await evaluate(page, `document.querySelector('#selectionPanel').scrollTop`);
+  assert.ok(scrolled > 40, `dragging a title should scroll the drawer, got scrollTop=${scrolled}`);
 });
 
 test('swiping the drawer to the right closes it, vertical drags do not', async ({ browserWsUrl }) => {
