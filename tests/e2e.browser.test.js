@@ -476,6 +476,35 @@ async function openDrawerWith(page, count) {
   await waitForExpression(page, `document.querySelectorAll('#selectionPanel .selection-item').length === ${count}`, 'drawer lists items');
 }
 
+// Whether a drag reads as "quick" (scroll) or "held" (reorder) depends on real elapsed time
+// against the 320ms long-press in selection-gestures.mjs. A finger always beats it; a
+// contended CI runner can stall a CDP round-trip past it and silently invert the gesture,
+// making the assertion test the wrong thing. So measure the gap the page actually saw and
+// retry when the environment, not the code, was at fault.
+const REORDER_HOLD_MS = 320;
+function instrumentPointerLag(page) {
+  return evaluateFunction(page, () => {
+    window.__lag = { down: 0, firstMove: 0 };
+    window.addEventListener('pointerdown', () => { window.__lag = { down: performance.now(), firstMove: 0 }; }, true);
+    window.addEventListener('pointermove', () => {
+      if (window.__lag.down && !window.__lag.firstMove) window.__lag.firstMove = performance.now();
+    }, true);
+  });
+}
+function pointerLag(page) {
+  return evaluate(page, `window.__lag.firstMove ? Math.round(window.__lag.firstMove - window.__lag.down) : -1`);
+}
+// Runs `attempt` until the page saw a genuinely quick first move, then returns its result.
+async function whenGestureWasQuick(page, attempt) {
+  let result;
+  for (let tries = 0; tries < 4; tries++) {
+    result = await attempt();
+    const lag = await pointerLag(page);
+    if (lag >= 0 && lag < REORDER_HOLD_MS) return result;
+  }
+  return result;
+}
+
 test('real touch: press-and-hold drags a title to reorder, a quick drag does not', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl, { mobile: true });
   await openDrawerWith(page, 2);
@@ -496,18 +525,24 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
     };
   });
   const touch = touchSequence(page, geo.x);
+  await instrumentPointerLag(page);
 
   // Quick drag (no hold): scrolls, never reorders.
-  await touch('touchStart', geo.y);
-  for (let step = 1; step <= 4; step++) await touch('touchMove', geo.y + step * 25);
-  await touch('touchEnd', geo.y + 100);
-  await sleep(80);
-  const quick = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
-  assert.deepEqual(quick, geo.before, 'a quick drag must not reorder');
+  const quick = await whenGestureWasQuick(page, async () => {
+    const orderBefore = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
+    await touch('touchStart', geo.y);
+    for (let step = 1; step <= 4; step++) await touch('touchMove', geo.y + step * 25);
+    await touch('touchEnd', geo.y + 100);
+    await sleep(80);
+    const orderAfter = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
+    return { orderBefore, orderAfter };
+  });
+  assert.deepEqual(quick.orderAfter, quick.orderBefore, 'a quick drag must not reorder');
 
   // Press and hold, then drag past the second item: reorders. The hold jitters by a pixel
   // rather than freezing: a real finger never holds perfectly still, and a frozen synthetic
   // touch point is exactly the case that trips the browser's stationary-press recognizer.
+  const before = quick.orderAfter; // re-read: a retried quick drag may have moved things
   await touch('touchStart', geo.y);
   for (let tick = 0; tick < 5; tick++) {
     await sleep(90);
@@ -527,7 +562,7 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
   }));
   assert.deepEqual(
     after.order,
-    [geo.before[1], geo.before[0]],
+    [before[1], before[0]],
     `press-and-hold drag should reorder (browser pointercancel: ${after.cancelled})`
   );
   assert.equal(after.stored.length, 2);
@@ -552,15 +587,18 @@ test('real touch: dragging a title still scrolls the drawer', async ({ browserWs
 
   // The title block sets touch-action:none, so this scroll comes from the JS passthrough.
   const touch = touchSequence(page, geo.x);
-  await touch('touchStart', geo.y);
-  for (let step = 1; step <= 5; step++) {
-    await touch('touchMove', geo.y - step * 30);
-    await sleep(16);
-  }
-  await touch('touchEnd', geo.y - 150);
-  await sleep(80);
-
-  const scrolled = await evaluate(page, `document.querySelector('#selectionPanel').scrollTop`);
+  await instrumentPointerLag(page);
+  const scrolled = await whenGestureWasQuick(page, async () => {
+    await evaluate(page, `document.querySelector('#selectionPanel').scrollTop = 0`);
+    await touch('touchStart', geo.y);
+    for (let step = 1; step <= 5; step++) {
+      await touch('touchMove', geo.y - step * 30);
+      await sleep(16);
+    }
+    await touch('touchEnd', geo.y - 150);
+    await sleep(80);
+    return evaluate(page, `document.querySelector('#selectionPanel').scrollTop`);
+  });
   assert.ok(scrolled > 40, `dragging a title should scroll the drawer, got scrollTop=${scrolled}`);
 });
 
