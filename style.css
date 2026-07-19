@@ -1388,6 +1388,13 @@ a.imdb-badge:focus-visible {
   color: inherit;
   text-align: left;
   cursor: grab;
+  /* A press-and-hold on text otherwise trips the browser's own long-press gesture (text
+     selection / callout / context menu) after ~0.5-1s, which cancels our pointer stream
+     mid-drag and silently kills the reorder. Opting out keeps the hold ours however long
+     the user rests before moving. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   /* The title block is the reorder drag source. It must own the vertical axis: with any
      pan-* value the browser claims the pan and cancels the pointer mid-drag, so a
      press-and-hold reorder can never complete on touch. Scrolling from here is driven by

@@ -484,6 +484,10 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
     const items = [...document.querySelectorAll('#selectionPanel .selection-item')];
     const grip = items[0].querySelector('[data-selection-move-id]').getBoundingClientRect();
     const target = items[1].getBoundingClientRect();
+    // A browser-issued pointercancel is the signature of the drag being taken away from us
+    // (long-press gesture recognizer / pan). Surface it so a failure names its own cause.
+    window.__pointerCancelled = false;
+    window.addEventListener('pointercancel', () => { window.__pointerCancelled = true; }, true);
     return {
       before: items.map(item => item.querySelector('.selection-item__title').textContent.trim()),
       x: Math.round(grip.left + grip.width / 2),
@@ -501,9 +505,14 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
   const quick = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
   assert.deepEqual(quick, geo.before, 'a quick drag must not reorder');
 
-  // Press and hold, then drag past the second item: reorders.
+  // Press and hold, then drag past the second item: reorders. The hold jitters by a pixel
+  // rather than freezing: a real finger never holds perfectly still, and a frozen synthetic
+  // touch point is exactly the case that trips the browser's stationary-press recognizer.
   await touch('touchStart', geo.y);
-  await sleep(450);
+  for (let tick = 0; tick < 5; tick++) {
+    await sleep(90);
+    await touch('touchMove', geo.y + (tick % 2 ? 1 : -1));
+  }
   for (let step = 1; step <= 6; step++) {
     await touch('touchMove', Math.round(geo.y + (geo.targetY - geo.y) * (step / 6)));
     await sleep(25);
@@ -513,9 +522,14 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
 
   const after = await evaluateFunction(page, () => ({
     order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
-    stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]')
+    stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]'),
+    cancelled: window.__pointerCancelled
   }));
-  assert.deepEqual(after.order, [geo.before[1], geo.before[0]], 'press-and-hold drag should reorder');
+  assert.deepEqual(
+    after.order,
+    [geo.before[1], geo.before[0]],
+    `press-and-hold drag should reorder (browser pointercancel: ${after.cancelled})`
+  );
   assert.equal(after.stored.length, 2);
 });
 

@@ -50,14 +50,24 @@ export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, hol
     startEvent = null;
     samples = [];
     clearHold();
+    window.removeEventListener("touchmove", blockTouchDefault);
     window.removeEventListener("pointermove", handleMove);
     window.removeEventListener("pointerup", handleUp);
     window.removeEventListener("pointercancel", handleCancel);
   }
 
+  // Once a drag is claimed the browser must keep its hands off the touch: preventDefault on a
+  // *pointer* event does not suppress the underlying touch default, so a long press can still
+  // trip the browser's own gesture recognizer (selection/context menu/scroll), which fires
+  // pointercancel and kills the drag mid-flight. Blocking touchmove is what actually stops it.
+  function blockTouchDefault(event) {
+    if (event.cancelable) event.preventDefault();
+  }
+
   function claim() {
     claimed = true;
     try { element.setPointerCapture(pointerId); } catch { /* synthetic/absent pointer */ }
+    window.addEventListener("touchmove", blockTouchDefault, { passive: false });
     onClaim?.({ event: startEvent, startEvent });
   }
 
