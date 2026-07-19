@@ -1,6 +1,6 @@
 {
   "name": "movie-library-explorer",
-  "version": "8.8.11",
+  "version": "8.8.12",
   "scripts": {
     "test": "npm run test:runner && npm run test:graph && npm run test:unit && npm run test:assets && npm run test:sw && npm run test:e2e && npm run test:smoke",
     "test:runner": "node tests/test-runner.test.js",

@@ -3,7 +3,7 @@
    index.html/style.css/script.js on every deploy, or clients can be served a
    stale shell from the cache. */
 const CACHE_PREFIX = "mlx-";
-const VERSION = "mlx-8.8.11";
+const VERSION = "mlx-8.8.12";
 const SHELL = VERSION + "-shell";
 // The CSV cache is intentionally version-independent (like POSTERS): the last
 // known-good dataset must survive an app upgrade so a freshly updated client is
@@ -20,8 +20,8 @@ const SHELL_ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=8.8.11",
-  "./script.js?v=8.8.11",
+  "./style.css?v=8.8.12",
+  "./script.js?v=8.8.12",
   "./src/app.mjs",
   "./src/config.mjs",
   "./src/data.mjs",
@@ -34,13 +34,13 @@ const SHELL_ASSETS = [
   "./src/sorting.mjs",
   "./src/state.mjs",
   "./src/utils.mjs",
-  "./favicon.svg?v=8.8.11",
-  "./favicon-16.png?v=8.8.11",
-  "./favicon-32.png?v=8.8.11",
-  "./apple-touch-icon.png?v=8.8.11",
-  "./icon-192.png?v=8.8.11",
-  "./icon-512.png?v=8.8.11",
-  "./icon-maskable-512.png?v=8.8.11"
+  "./favicon.svg?v=8.8.12",
+  "./favicon-16.png?v=8.8.12",
+  "./favicon-32.png?v=8.8.12",
+  "./apple-touch-icon.png?v=8.8.12",
+  "./icon-192.png?v=8.8.12",
+  "./icon-512.png?v=8.8.12",
+  "./icon-maskable-512.png?v=8.8.12"
 ];
 
 self.addEventListener("install", event => {

@@ -9,6 +9,7 @@ import {
   parseRuntime
 } from "./utils.mjs";
 import {
+  appleTvUrl,
   cell,
   displayOriginalTitle,
   displayTitle,
@@ -203,7 +204,8 @@ export function movieViewModel(row) {
     id: movieId(row),
     title,
     originalTitle: displayOriginalTitle(row),
-    url: movieUrl(row),
+    appleTvUrl: appleTvUrl(row),
+    imdbUrl: movieUrl(row),
     posterUrl: posterUrl(row),
     rating: cell(row, "imdbRating"),
     runtime: parseRuntime(cell(row, "runtime")),
@@ -239,11 +241,11 @@ function createMoviePosterNode(model, modifierClass = "", priority = posterPrior
 }
 function createMovieTitleNodes(model) {
   const h2 = createElement("h2");
-  if (model.url) {
+  if (model.appleTvUrl) {
     h2.append(createElement("a", {
       className: "movie-title-link",
       text: model.title,
-      attrs: { href: model.url, target: "_blank", rel: "noopener noreferrer", "aria-label": `Ouvrir ${model.title} sur IMDb` }
+      attrs: { href: model.appleTvUrl, target: "_blank", rel: "noopener noreferrer", "aria-label": `Ouvrir ${model.title} dans Apple TV` }
     }));
   } else {
     h2.textContent = model.title;
@@ -284,7 +286,11 @@ function createFranchiseBadgeNode(model) {
 }
 function createImdbBadgeNode(model) {
   if (!model.rating) return null;
-  return createElement("span", { className: ["imdb-badge", ratingClass(model.rating)] }, [
+  const tag = model.imdbUrl ? "a" : "span";
+  const attrs = model.imdbUrl
+    ? { href: model.imdbUrl, target: "_blank", rel: "noopener noreferrer", "aria-label": `Ouvrir ${model.title} sur IMDb` }
+    : {};
+  return createElement(tag, { className: ["imdb-badge", ratingClass(model.rating)], attrs }, [
     createElement("span", { className: "imdb-dot", attrs: { "aria-hidden": "true" } }),
     createElement("span", { className: "imdb-badge__value", text: `IMDb ${model.rating}` })
   ]);

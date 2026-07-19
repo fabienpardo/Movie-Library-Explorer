@@ -16,7 +16,7 @@ test("fixture CSV parses into the expected library rows", async () => {
   const fixture = readFixtureCsv();
   const { labels, rows } = h.csvToTable(fixture);
 
-  assert.equal(rows.length, 511);
+  assert.equal(rows.length, 524);
   assert.ok(labels.includes("Title"));
   assert.equal(rows[0].Title, "60 secondes chrono");
 });
@@ -33,6 +33,7 @@ test("fixed column map matches every header in the fixture", async () => {
   assert.equal(h.COLUMNS.title, "Title");
   assert.equal(h.COLUMNS.originalTitle, "Original Title");
   assert.equal(h.COLUMNS.url, "URL");
+  assert.equal(h.COLUMNS.appleTvUrl, "AppleTV link");
   assert.equal(h.COLUMNS.poster, "Poster");
   assert.equal(h.COLUMNS.imdbRating, "IMDb Rating");
   assert.equal(h.COLUMNS.runtime, "Runtime (mins)");
@@ -134,7 +135,7 @@ test("filter option counts are sorted by descending count", async () => {
   }
 });
 
-test("runtime, rating and IMDb URL helpers handle fixture values", async () => {
+test("runtime, rating, IMDb and Apple TV URL helpers handle fixture values", async () => {
   const { h, rows } = await loadFixtureState();
 
   const first = rows[0];
@@ -144,6 +145,8 @@ test("runtime, rating and IMDb URL helpers handle fixture values", async () => {
   assert.equal(h.ratingClass("7.1"), "meta-badge--rating-mid");
   assert.equal(h.ratingClass("6.5"), "meta-badge--rating-low");
   assert.equal(h.movieUrl(first), "https://www.imdb.com/title/tt0187078/");
+  assert.equal(h.appleTvUrl(first), "https://tv.apple.com/fr/movie/gone-in-60-seconds/umc.cmc.2546wkecbfhptzo6mvoj3l7ua");
+  assert.equal(h.appleTvUrl({ "AppleTV link": "javascript:alert(1)" }), "");
   assert.match(h.posterUrl(first), /^https:\/\//);
 });
 
