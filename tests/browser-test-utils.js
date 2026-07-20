@@ -57,7 +57,7 @@ function findChromium() {
 // Lets the runner skip cleanly instead of crashing on a missing global or executable.
 function browserTestSkipReason() {
   if (typeof WebSocket === 'undefined') {
-    return 'global WebSocket is unavailable (requires Node >= 22, or run node with --experimental-websocket).';
+    return 'global WebSocket is unavailable (this project requires Node >= 22).';
   }
   if (!CHROMIUM_CANDIDATES.some(candidate => fs.existsSync(candidate))) {
     return 'no Chromium/Chrome executable found (set CHROMIUM_PATH to enable browser E2E tests).';
