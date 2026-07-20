@@ -56,10 +56,12 @@ export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, hol
     window.removeEventListener("pointercancel", handleCancel);
   }
 
-  // Once a drag is claimed the browser must keep its hands off the touch: preventDefault on a
-  // *pointer* event does not suppress the underlying touch default, so a long press can still
-  // trip the browser's own gesture recognizer (selection/context menu/scroll), which fires
-  // pointercancel and kills the drag mid-flight. Blocking touchmove is what actually stops it.
+  // A long-press drag must own the touch outright. preventDefault on a *pointer* event does
+  // not suppress the underlying touch default, so without this the browser's own gesture
+  // recognizer can claim the touch and fire pointercancel mid-drag, silently killing the
+  // drag. This is registered from pointerdown, not from claim: by the time the hold elapses
+  // the browser has already decided who owns the gesture, and a blocking (non-passive)
+  // touchmove handler present from the start is what keeps that decision ours.
   function blockTouchDefault(event) {
     if (event.cancelable) event.preventDefault();
   }
@@ -67,7 +69,6 @@ export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, hol
   function claim() {
     claimed = true;
     try { element.setPointerCapture(pointerId); } catch { /* synthetic/absent pointer */ }
-    window.addEventListener("touchmove", blockTouchDefault, { passive: false });
     onClaim?.({ event: startEvent, startEvent });
   }
 
@@ -85,7 +86,10 @@ export function attachPointerDrag(element, { axis, slop = 10, holdDelay = 0, hol
     window.addEventListener("pointerup", handleUp);
     window.addEventListener("pointercancel", handleCancel);
     const delay = typeof holdDelay === "function" ? holdDelay(event) : holdDelay;
-    if (delay > 0) holdTimer = setTimeout(() => { holdTimer = 0; if (active && !claimed) claim(); }, delay);
+    if (delay > 0) {
+      window.addEventListener("touchmove", blockTouchDefault, { passive: false });
+      holdTimer = setTimeout(() => { holdTimer = 0; if (active && !claimed) claim(); }, delay);
+    }
   }
 
   function matches(event) {

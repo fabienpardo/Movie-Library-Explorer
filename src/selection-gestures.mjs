@@ -114,7 +114,7 @@ function attachReorder(panel) {
       if (before) list.insertBefore(dragged, before);
       else list.appendChild(dragged);
     },
-    onEnd({ cancelled }) {
+    onEnd() {
       const item = dragged;
       const container = list;
       item?.classList.remove("is-dragging-item");
@@ -126,7 +126,11 @@ function attachReorder(panel) {
       setTimeout(() => { suppressClick = false; }, 0);
       if (!item || !container) { renderSelectionPanel(); return; }
       const id = item.querySelector("[data-selection-move-id]")?.dataset.selectionMoveId;
-      if (cancelled || !id) { renderSelectionPanel(); return; } // restore canonical order
+      if (!id) { renderSelectionPanel(); return; }
+      // Commit on cancel too, not just on a clean drop: the browser can revoke the pointer
+      // mid-drag (its own gesture recognizer, an incoming call), and by then the item has
+      // already visibly moved. Snapping it back would throw away a reorder the user watched
+      // happen; landing it where they last saw it is what they expect.
       const index = [...container.querySelectorAll(".selection-item")].indexOf(item);
       // Converge state + storage + DOM in a single re-render (no-op moves fall through fine).
       if (!moveSelectionItemTo(id, index)) renderSelectionPanel();

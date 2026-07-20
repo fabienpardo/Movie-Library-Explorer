@@ -1402,6 +1402,11 @@ a.imdb-badge:focus-visible {
   touch-action: none;
 }
 
+/* touch-action is not inherited, and the touch actually hit-tests to whichever child span
+   sits under the finger. Without this the effective value for that span can let the browser
+   claim the gesture and cancel the drag, intermittently. */
+.selection-item__summary * { touch-action: none; }
+
 .selection-item.is-dragging-item .selection-item__summary { cursor: grabbing; }
 
 .selection-item__summary:hover,

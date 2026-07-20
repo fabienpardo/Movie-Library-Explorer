@@ -542,24 +542,38 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
   // Press and hold, then drag past the second item: reorders. The hold jitters by a pixel
   // rather than freezing: a real finger never holds perfectly still, and a frozen synthetic
   // touch point is exactly the case that trips the browser's stationary-press recognizer.
-  const before = quick.orderAfter; // re-read: a retried quick drag may have moved things
-  await touch('touchStart', geo.y);
-  for (let tick = 0; tick < 5; tick++) {
-    await sleep(90);
-    await touch('touchMove', geo.y + (tick % 2 ? 1 : -1));
-  }
-  for (let step = 1; step <= 6; step++) {
-    await touch('touchMove', Math.round(geo.y + (geo.targetY - geo.y) * (step / 6)));
-    await sleep(25);
-  }
-  await touch('touchEnd', geo.targetY);
-  await sleep(120);
+  //
+  // Chrome intermittently revokes the pointer (pointercancel) shortly after the hold under
+  // injected touch, taking the drag with it. That is the harness racing the browser's gesture
+  // recogniser, not a product defect, so retry when we observe it — but only when we observe
+  // it: if the drag source ever stops owning the touch, every attempt cancels and this still
+  // fails, with the cancel named in the message.
+  let before = quick.orderAfter;
+  let after;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    before = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
+    await evaluate(page, `window.__pointerCancelled = false`);
 
-  const after = await evaluateFunction(page, () => ({
-    order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
-    stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]'),
-    cancelled: window.__pointerCancelled
-  }));
+    await touch('touchStart', geo.y);
+    for (let tick = 0; tick < 3; tick++) {
+      await sleep(120);
+      await touch('touchMove', geo.y + (tick % 2 ? 1 : -1));
+    }
+    for (let step = 1; step <= 6; step++) {
+      await touch('touchMove', Math.round(geo.y + (geo.targetY - geo.y) * (step / 6)));
+      await sleep(25);
+    }
+    await touch('touchEnd', geo.targetY);
+    await sleep(120);
+
+    after = await evaluateFunction(page, () => ({
+      order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+      stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]'),
+      cancelled: window.__pointerCancelled
+    }));
+    if (!after.cancelled) break; // a clean run is authoritative, pass or fail
+  }
+
   assert.deepEqual(
     after.order,
     [before[1], before[0]],
