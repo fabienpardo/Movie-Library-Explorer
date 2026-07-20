@@ -517,11 +517,16 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
     // (long-press gesture recognizer / pan). Surface it so a failure names its own cause.
     window.__pointerCancelled = false;
     window.addEventListener('pointercancel', () => { window.__pointerCancelled = true; }, true);
+    const x = Math.round(grip.left + grip.width / 2);
+    const y = Math.round(grip.top + grip.height / 2);
+    // What the finger actually lands on, and whether that element cedes the axis to us.
+    const hit = document.elementFromPoint(x, y);
     return {
       before: items.map(item => item.querySelector('.selection-item__title').textContent.trim()),
-      x: Math.round(grip.left + grip.width / 2),
-      y: Math.round(grip.top + grip.height / 2),
-      targetY: Math.round(target.top + target.height * 0.8)
+      x,
+      y,
+      targetY: Math.round(target.top + target.height * 0.8),
+      hit: hit ? `${hit.tagName}.${hit.className || '-'} touch-action=${getComputedStyle(hit).touchAction} inSource=${Boolean(hit.closest('[data-selection-move-id]'))}` : 'nothing'
     };
   });
   const touch = touchSequence(page, geo.x);
@@ -577,7 +582,7 @@ test('real touch: press-and-hold drags a title to reorder, a quick drag does not
   assert.deepEqual(
     after.order,
     [before[1], before[0]],
-    `press-and-hold drag should reorder (browser pointercancel: ${after.cancelled})`
+    `press-and-hold drag should reorder (pointercancel=${after.cancelled}, hit=${geo.hit})`
   );
   assert.equal(after.stored.length, 2);
 });
