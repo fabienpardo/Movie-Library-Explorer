@@ -4,10 +4,6 @@
 // make every other suite untrustworthy. This guards the harness the whole project relies on.
 const assert = require('node:assert/strict');
 const { createTestRegistry, runTests } = require('./helpers/test-runner');
-const {
-  shouldRelaunchWithWebSocketFlag,
-  supportsExperimentalWebSocketFlag
-} = require('./helpers/run-e2e');
 const { startChromiumWithRetry } = require('./helpers/browser-runner');
 
 async function silenced(fn) {
@@ -39,13 +35,6 @@ async function silenced(fn) {
   passing.test("b", () => {});
   await silenced(() => runTests(passing.tests, { label: "self-check" }));
   assert.notEqual(process.exitCode, 1, "runner must not flag a clean run");
-
-  assert.equal(supportsExperimentalWebSocketFlag('20.9.0'), false, 'Node 20.0-20.9 must preserve the E2E skip path');
-  assert.equal(supportsExperimentalWebSocketFlag('20.10.0'), true, 'Node 20.10+ can use --experimental-websocket');
-  assert.equal(shouldRelaunchWithWebSocketFlag({ hasWebSocket: false, reexec: undefined, version: '20.9.0' }), false);
-  assert.equal(shouldRelaunchWithWebSocketFlag({ hasWebSocket: false, reexec: undefined, version: '20.10.0' }), true);
-  assert.equal(shouldRelaunchWithWebSocketFlag({ hasWebSocket: true, reexec: undefined, version: '20.10.0' }), false);
-  assert.equal(shouldRelaunchWithWebSocketFlag({ hasWebSocket: false, reexec: '1', version: '20.10.0' }), false);
 
   const attempts = [];
   const cleanedProfiles = [];
@@ -86,7 +75,7 @@ async function silenced(fn) {
   assert.deepEqual(failedProfiles, ['failed-1', 'failed-2'], 'every failed browser process should be cleaned up');
 
   process.exitCode = 0;
-  console.log("✓ runner reports thrown errors, failed assertions, clean runs and E2E wrapper decisions correctly");
+  console.log("✓ runner reports thrown errors, failed assertions and clean runs correctly");
   console.log("\n1/1 runner self-check passed.");
 })().catch(error => {
   console.error(error);

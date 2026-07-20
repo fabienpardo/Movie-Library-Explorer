@@ -8,14 +8,14 @@
     "test:unit": "node tests/regression.test.js",
     "test:assets": "node tests/static-assets.test.js",
     "test:sw": "node tests/sw.test.js",
-    "test:e2e": "node tests/helpers/run-e2e.js",
-    "test:smoke": "node tests/helpers/run-e2e.js tests/smoke.browser.test.js",
+    "test:e2e": "node tests/e2e.browser.test.js",
+    "test:smoke": "node tests/smoke.browser.test.js",
     "test:coverage": "c8 --include=src/*.mjs --include=script.js --check-coverage --lines 40 --statements 40 --functions 30 --branches 75 --reporter=text --reporter=html node tests/regression.test.js",
     "lint": "eslint src tests script.js",
     "bump": "node scripts/bump-version.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "c8": "^10.1.3",
