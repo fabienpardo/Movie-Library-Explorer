@@ -128,6 +128,7 @@ export function reconcilePersistedSelection(rows = state.rows, columns = state.c
   });
 
   let changed = false;
+  // Rebuild in the same iteration order so the user's chosen drawer order survives a reload.
   const reconciled = new Set();
   for (const id of state.selection) {
     const nextId = aliases.get(id) || id;

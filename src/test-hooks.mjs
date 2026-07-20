@@ -59,6 +59,9 @@ import { movieViewModel, posterPriorityForIndex, ratingClass } from "./render-ca
 import { renderResultSummary } from "./render-filters.mjs";
 import {
   clearSelection,
+  moveSelectionItem,
+  moveSelectionItemByKeyboard,
+  moveSelectionItemTo,
   selectedRows,
   syncSelectionCount,
   toggleMovieSelectionById,
@@ -101,6 +104,9 @@ export function getTestHooks() {
     mainCountry,
     matchesFilters,
     matchesList,
+    moveSelectionItem,
+    moveSelectionItemByKeyboard,
+    moveSelectionItemTo,
     movieUrl,
     movieViewModel,
     posterUrl,

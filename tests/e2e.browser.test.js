@@ -422,6 +422,250 @@ test('temporary selection can add, review, remove and clear movies', async ({ br
   assert.equal(await evaluate(page, `localStorage.getItem('movieExplorer.selection')`), null);
 });
 
+test('selection items can be reordered from the keyboard', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl);
+  await evaluateFunction(page, () => {
+    [...document.querySelectorAll('.movie-card button[data-selection-id]')].slice(0, 2).forEach(button => button.click());
+  });
+  await waitForExpression(page, `document.querySelector('#selectionCount').textContent.trim() === '2'`, 'two movies selected');
+  await click(page, '#toggleSelectionPanel');
+  await waitForExpression(page, `document.querySelectorAll('#selectionPanel .selection-item').length === 2`, 'panel lists two items');
+
+  const before = await evaluateFunction(page, () => ({
+    order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+    stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]')
+  }));
+
+  const after = await evaluateFunction(page, () => {
+    const second = [...document.querySelectorAll('#selectionPanel button[data-selection-move-id]')][1];
+    const movedId = second.dataset.selectionMoveId;
+    second.focus();
+    second.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+    return {
+      order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+      stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]'),
+      focusOnMoved: document.activeElement?.dataset?.selectionMoveId === movedId,
+      live: document.querySelector('#selectionPanel [aria-live]')?.textContent || ''
+    };
+  });
+
+  assert.deepEqual(after.order, [before.order[1], before.order[0]]);
+  assert.deepEqual(after.stored, [before.stored[1], before.stored[0]]);
+  assert.equal(after.focusOnMoved, true);
+  assert.match(after.live, /position 1/);
+});
+
+// Real CDP touch events, unlike synthetic PointerEvents, go through the browser's actual
+// input pipeline and so honour touch-action. That matters here: if the drag source ever
+// allows the browser to pan, it claims the gesture and fires pointercancel mid-drag, and
+// touch reordering silently stops working — a regression synthetic events cannot catch.
+function touchSequence(page, x) {
+  return (type, y) => page.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }]
+  });
+}
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function openDrawerWith(page, count) {
+  await evaluateFunction(page, n => {
+    [...document.querySelectorAll('.movie-card button[data-selection-id]')].slice(0, n).forEach(button => button.click());
+  }, count);
+  await waitForExpression(page, `document.querySelector('#selectionCount').textContent.trim() === '${count}'`, `${count} movies selected`);
+  await click(page, '#toggleSelectionPanel');
+  await waitForExpression(page, `document.querySelectorAll('#selectionPanel .selection-item').length === ${count}`, 'drawer lists items');
+  await waitForDrawerSettled(page);
+}
+
+// The drawer renders its items before it has finished sliding in (220ms translateX), so
+// measuring straight after the items appear yields coordinates that are still off-screen to
+// the right — touches then land on nothing and the browser takes the gesture. Wait for the
+// panel to actually occupy its final position.
+function waitForDrawerSettled(page) {
+  return waitForExpression(page, `(() => {
+    const rect = document.querySelector('#selectionPanel').getBoundingClientRect();
+    return rect.left >= 0 && rect.right <= window.innerWidth + 1;
+  })()`, 'drawer finished sliding in');
+}
+
+// Whether a drag reads as "quick" (scroll) or "held" (reorder) depends on real elapsed time
+// against the 320ms long-press in selection-gestures.mjs. A finger always beats it; a
+// contended CI runner can stall a CDP round-trip past it and silently invert the gesture,
+// making the assertion test the wrong thing. So measure the gap the page actually saw and
+// retry when the environment, not the code, was at fault.
+const REORDER_HOLD_MS = 320;
+function instrumentPointerLag(page) {
+  return evaluateFunction(page, () => {
+    window.__lag = { down: 0, firstMove: 0 };
+    window.addEventListener('pointerdown', () => { window.__lag = { down: performance.now(), firstMove: 0 }; }, true);
+    window.addEventListener('pointermove', () => {
+      if (window.__lag.down && !window.__lag.firstMove) window.__lag.firstMove = performance.now();
+    }, true);
+  });
+}
+function pointerLag(page) {
+  return evaluate(page, `window.__lag.firstMove ? Math.round(window.__lag.firstMove - window.__lag.down) : -1`);
+}
+// Runs `attempt` until the page saw a genuinely quick first move, then returns its result.
+async function whenGestureWasQuick(page, attempt) {
+  let result;
+  for (let tries = 0; tries < 4; tries++) {
+    result = await attempt();
+    const lag = await pointerLag(page);
+    if (lag >= 0 && lag < REORDER_HOLD_MS) return result;
+  }
+  return result;
+}
+
+test('real touch: press-and-hold drags a title to reorder, a quick drag does not', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl, { mobile: true });
+  await openDrawerWith(page, 2);
+
+  const geo = await evaluateFunction(page, () => {
+    const items = [...document.querySelectorAll('#selectionPanel .selection-item')];
+    const grip = items[0].querySelector('[data-selection-move-id]').getBoundingClientRect();
+    const target = items[1].getBoundingClientRect();
+    // A browser-issued pointercancel is the signature of the drag being taken away from us
+    // (long-press gesture recognizer / pan). Surface it so a failure names its own cause.
+    window.__pointerCancelled = false;
+    window.addEventListener('pointercancel', () => { window.__pointerCancelled = true; }, true);
+    const x = Math.round(grip.left + grip.width / 2);
+    const y = Math.round(grip.top + grip.height / 2);
+    // What the finger actually lands on, and whether that element cedes the axis to us.
+    const hit = document.elementFromPoint(x, y);
+    return {
+      before: items.map(item => item.querySelector('.selection-item__title').textContent.trim()),
+      x,
+      y,
+      targetY: Math.round(target.top + target.height * 0.8),
+      hit: hit ? `${hit.tagName}.${hit.className || '-'} touch-action=${getComputedStyle(hit).touchAction} inSource=${Boolean(hit.closest('[data-selection-move-id]'))}` : 'nothing'
+    };
+  });
+  const touch = touchSequence(page, geo.x);
+  await instrumentPointerLag(page);
+
+  // Quick drag (no hold): scrolls, never reorders.
+  const quick = await whenGestureWasQuick(page, async () => {
+    const orderBefore = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
+    await touch('touchStart', geo.y);
+    for (let step = 1; step <= 4; step++) await touch('touchMove', geo.y + step * 25);
+    await touch('touchEnd', geo.y + 100);
+    await sleep(80);
+    const orderAfter = await evaluate(page, `[...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim())`);
+    return { orderBefore, orderAfter };
+  });
+  assert.deepEqual(quick.orderAfter, quick.orderBefore, 'a quick drag must not reorder');
+
+  // Press and hold, then drag past the second item: reorders. The hold jitters by a pixel
+  // rather than freezing, since a real finger never holds perfectly still.
+  const before = quick.orderAfter;
+  await touch('touchStart', geo.y);
+  for (let tick = 0; tick < 3; tick++) {
+    await sleep(120);
+    await touch('touchMove', geo.y + (tick % 2 ? 1 : -1));
+  }
+  for (let step = 1; step <= 6; step++) {
+    await touch('touchMove', Math.round(geo.y + (geo.targetY - geo.y) * (step / 6)));
+    await sleep(25);
+  }
+  await touch('touchEnd', geo.targetY);
+  await sleep(120);
+
+  const after = await evaluateFunction(page, () => ({
+    order: [...document.querySelectorAll('#selectionPanel .selection-item__title')].map(el => el.textContent.trim()),
+    stored: JSON.parse(localStorage.getItem('movieExplorer.selection') || '[]'),
+    cancelled: window.__pointerCancelled
+  }));
+  // A pointercancel means the browser took the gesture — the signature of the drag source
+  // failing to own the touch, so report it rather than just an unchanged list.
+  assert.deepEqual(
+    after.order,
+    [before[1], before[0]],
+    `press-and-hold drag should reorder (pointercancel=${after.cancelled}, hit=${geo.hit})`
+  );
+  assert.equal(after.stored.length, 2);
+});
+
+test('real touch: dragging a title still scrolls the drawer', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl, { mobile: true });
+  await openDrawerWith(page, 14); // enough items to overflow the panel
+
+  const geo = await evaluateFunction(page, () => {
+    const panel = document.querySelector('#selectionPanel');
+    const grip = document.querySelectorAll('#selectionPanel [data-selection-move-id]')[3].getBoundingClientRect();
+    return {
+      scrollable: panel.scrollHeight > panel.clientHeight,
+      scrollTop: panel.scrollTop,
+      x: Math.round(grip.left + grip.width / 2),
+      y: Math.round(grip.top + grip.height / 2)
+    };
+  });
+  assert.equal(geo.scrollable, true, 'fixture should overflow the drawer');
+  assert.equal(geo.scrollTop, 0);
+
+  // The title block sets touch-action:none, so this scroll comes from the JS passthrough.
+  const touch = touchSequence(page, geo.x);
+  await instrumentPointerLag(page);
+  const scrolled = await whenGestureWasQuick(page, async () => {
+    await evaluate(page, `document.querySelector('#selectionPanel').scrollTop = 0`);
+    await touch('touchStart', geo.y);
+    for (let step = 1; step <= 5; step++) {
+      await touch('touchMove', geo.y - step * 30);
+      await sleep(16);
+    }
+    await touch('touchEnd', geo.y - 150);
+    await sleep(80);
+    return evaluate(page, `document.querySelector('#selectionPanel').scrollTop`);
+  });
+  assert.ok(scrolled > 40, `dragging a title should scroll the drawer, got scrollTop=${scrolled}`);
+});
+
+test('swiping the drawer to the right closes it, vertical drags do not', async ({ browserWsUrl }) => {
+  const { page } = await createPage(browserWsUrl, { mobile: true });
+  await evaluateFunction(page, () => document.querySelector('.movie-card button[data-selection-id]').click());
+  await click(page, '#toggleSelectionPanel');
+  await waitForExpression(page, `document.querySelector('#selectionPanel').classList.contains('is-open')`, 'drawer open');
+  await waitForDrawerSettled(page); // coordinates are meaningless mid-slide
+
+  // A near-vertical drag must not close the drawer.
+  await evaluateFunction(page, () => {
+    const panel = document.querySelector('#selectionPanel');
+    const rect = panel.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.bottom - 120;
+    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 2, pointerType: 'touch', clientX: x, ...extra });
+    panel.dispatchEvent(new PointerEvent('pointerdown', opts({ clientY: y })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientY: y - 130 })));
+    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientY: y - 130 })));
+  });
+  assert.equal(await evaluate(page, `document.querySelector('#selectionPanel').classList.contains('is-open')`), true);
+
+  // A decisive right-swipe closes it.
+  await evaluateFunction(page, () => {
+    const panel = document.querySelector('#selectionPanel');
+    const rect = panel.getBoundingClientRect();
+    const startX = rect.left + 40;
+    const y = rect.bottom - 120;
+    const opts = extra => ({ bubbles: true, cancelable: true, pointerId: 3, pointerType: 'touch', clientY: y, ...extra });
+    panel.dispatchEvent(new PointerEvent('pointerdown', opts({ clientX: startX })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientX: startX + 60 })));
+    window.dispatchEvent(new PointerEvent('pointermove', opts({ clientX: startX + 280 })));
+    window.dispatchEvent(new PointerEvent('pointerup', opts({ clientX: startX + 280 })));
+  });
+  await waitForExpression(page, `!document.querySelector('#selectionPanel').classList.contains('is-open')`, 'drawer closed after swipe');
+
+  const closed = await evaluateFunction(page, () => ({
+    ariaHidden: document.querySelector('#selectionPanel').getAttribute('aria-hidden'),
+    inert: document.querySelector('#selectionPanel').hasAttribute('inert'),
+    backdropHidden: document.querySelector('#selectionBackdrop').hidden,
+    bodyClass: document.body.classList.contains('selection-open')
+  }));
+  assert.equal(closed.ariaHidden, 'true');
+  assert.equal(closed.inert, true);
+  assert.equal(closed.backdropHidden, true);
+  assert.equal(closed.bodyClass, false);
+});
+
 test('failed reload clears stale cards, active filters and filter lists', async ({ browserWsUrl }) => {
   const { page } = await createPage(browserWsUrl);
   await clickFilterOptionByLabel(page, '#genreList', 'Action');

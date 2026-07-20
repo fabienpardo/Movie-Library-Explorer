@@ -243,6 +243,76 @@ test("selection pruning is skipped when the URL header is missing", async () => 
   assert.ok(h.state.selection.has("url:https://www.imdb.com/title/tt1234567/"));
 });
 
+function orderedSelectionFixture(h) {
+  const labels = ["Title", "Year", "URL", "Position"];
+  const columns = h.COLUMNS;
+  const rows = [
+    { Title: "Alpha", Year: "2001", URL: "https://www.imdb.com/title/tt0000001/", Position: "1" },
+    { Title: "Bravo", Year: "2002", URL: "https://www.imdb.com/title/tt0000002/", Position: "2" },
+    { Title: "Charlie", Year: "2003", URL: "https://www.imdb.com/title/tt0000003/", Position: "3" }
+  ];
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+  const [a, b, c] = preparedRows.map(h.movieId);
+  return { columns, preparedRows, a, b, c };
+}
+
+test("selectedRows follows selection insertion order, not dataset order", async () => {
+  const h = await loadAppHooks();
+  const { a, b, c } = orderedSelectionFixture(h);
+  // Add out of dataset order (C, A, B); the drawer must show exactly that order.
+  h.state.selection = new Set([c, a, b]);
+  assert.deepEqual(h.selectedRows().map(h.movieId), [c, a, b]);
+});
+
+test("moveSelectionItemTo reorders, clamps out-of-range and no-ops", async () => {
+  const h = await loadAppHooks();
+  const { a, b, c } = orderedSelectionFixture(h);
+  h.state.selection = new Set([a, b, c]);
+
+  assert.equal(h.moveSelectionItemTo(a, 2), true);          // A to the end
+  assert.deepEqual([...h.state.selection], [b, c, a]);
+  assert.equal(h.moveSelectionItemTo(b, 99), true);         // clamped to last
+  assert.deepEqual([...h.state.selection], [c, a, b]);
+  assert.equal(h.moveSelectionItemTo(c, 0), false);         // already there
+  assert.equal(h.moveSelectionItemTo("url:absent", 0), false); // not selected
+  assert.deepEqual([...h.state.selection], [c, a, b]);
+});
+
+test("moveSelectionItem steps one position and no-ops at the edges", async () => {
+  const h = await loadAppHooks();
+  const { a, b, c } = orderedSelectionFixture(h);
+  h.state.selection = new Set([a, b, c]);
+
+  assert.equal(h.moveSelectionItem(b, -1), true);           // B up
+  assert.deepEqual([...h.state.selection], [b, a, c]);
+  assert.equal(h.moveSelectionItem(b, -1), false);          // B already first
+  assert.equal(h.moveSelectionItem(c, 1), false);           // C already last
+});
+
+test("reconcilePersistedSelection preserves order when a middle id is pruned", async () => {
+  const h = await loadAppHooks();
+  const labels = ["Title", "Year", "URL", "Position"];
+  const columns = h.COLUMNS;
+  const rows = [
+    { Title: "Alpha", Year: "2001", URL: "https://www.imdb.com/title/tt0000001/", Position: "1" },
+    { Title: "Charlie", Year: "2003", URL: "https://www.imdb.com/title/tt0000003/", Position: "2" }
+  ];
+  const preparedRows = rows.map((row, index) => ({ ...row, __movieExplorerId: h.makeMovieId(row, index, columns) }));
+  resetState(h, labels, preparedRows, columns);
+  // Persisted order is C, B, A; B (tt0000002) is no longer in the dataset.
+  h.state.selection = new Set([
+    "url:https://www.imdb.com/title/tt0000003/",
+    "url:https://www.imdb.com/title/tt0000002/",
+    "url:https://www.imdb.com/title/tt0000001/"
+  ]);
+  h.reconcilePersistedSelection(preparedRows, columns);
+  assert.deepEqual([...h.state.selection], [
+    "url:https://www.imdb.com/title/tt0000003/",
+    "url:https://www.imdb.com/title/tt0000001/"
+  ]);
+});
+
 test("search filtering matches across fields and memoizes per-row search text", async () => {
   const h = await loadAppHooks();
   const { labels, rows } = h.csvToTable(readFixtureCsv());

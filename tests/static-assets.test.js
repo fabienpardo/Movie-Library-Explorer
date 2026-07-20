@@ -79,6 +79,15 @@ test('service worker precaches only existing assets at the aligned version', () 
   assert.ok(shell, 'SHELL_ASSETS array should be present');
   const assets = [...shell[1].matchAll(/"([^"]+)"/g)].map(match => stripQuery(match[1]).replace(/^\.\//, ''));
   for (const asset of assets) assertFileExists(asset === '' ? 'index.html' : asset);
+
+  // ...and the reverse: every ES module the app can import must be precached. Missing one
+  // only breaks the installed/offline PWA (the cached app.mjs imports a module that was
+  // never cached), which no other test exercises.
+  const srcDir = path.join(rootDir, 'src');
+  const modules = fs.readdirSync(srcDir).filter(name => name.endsWith('.mjs') && name !== 'test-hooks.mjs');
+  for (const name of modules) {
+    assert.ok(assets.includes(`src/${name}`), `sw.js SHELL_ASSETS must precache src/${name}`);
+  }
 });
 
 test('cache-busting versions are aligned with the current package version', () => {

@@ -42,6 +42,7 @@ import {
 import {
   clearSelection,
   closeSelectionPanel,
+  moveSelectionItemByKeyboard,
   removeSelectionItem,
   renderSelectionPanel,
   syncSelectionCount,
@@ -50,6 +51,7 @@ import {
   toggleSelectionDetail,
   toggleSelectionPanel
 } from "./selection.mjs";
+import { initSelectionGestures } from "./selection-gestures.mjs";
 
 // A rebuild-on-render (filter checkbox, card filter button, active-filter chip) can
 // leave focus stranded on <body>. Capture a stable descriptor of the focused control
@@ -442,6 +444,14 @@ function bindEvents() {
     if (event.target.closest("button[data-selection-action='close']")) { closeSelectionPanel(); return; }
     if (event.target.closest("button[data-selection-action='clear']")) clearSelection();
   });
+  // Keyboard reorder: Arrow Up/Down on a drag handle moves that item and keeps focus on it.
+  els.selectionPanel.addEventListener("keydown", event => {
+    const handle = event.target.closest("button[data-selection-move-id]");
+    if (!handle || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    event.preventDefault();
+    moveSelectionItemByKeyboard(handle.dataset.selectionMoveId, event.key === "ArrowUp" ? -1 : 1);
+  });
+  initSelectionGestures();
   document.querySelectorAll(".filter-jump-nav__button[data-filter-category]").forEach(button => button.addEventListener("click", () => setActivePanel(button.dataset.filterCategory)));
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && state.filtersOpen) closeFilters();
